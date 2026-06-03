@@ -74,14 +74,14 @@ func TestEncode_NodesPresent(t *testing.T) {
 	}
 }
 
-func TestEncode_EdgePolyline(t *testing.T) {
+func TestEncode_EdgePath(t *testing.T) {
 	f := ast.NewFlowchart("", ast.DirectionTB)
 	f.MustAddNode(&ast.FlowNode{ID: "A", Shape: ast.ShapeRect})
 	f.MustAddNode(&ast.FlowNode{ID: "B", Shape: ast.ShapeRect})
 	f.AddEdge(&ast.FlowEdge{From: "A", To: "B", Style: ast.EdgeSolid})
 	out := encode(t, f)
-	if !strings.Contains(out, "<polyline") {
-		t.Error("expected polyline element for edge")
+	if !strings.Contains(out, `<path d="M`) {
+		t.Error("expected path element for edge")
 	}
 }
 
@@ -147,25 +147,25 @@ func TestEncode_EdgeLabel_AtMidpoint(t *testing.T) {
 		t.Fatalf("could not parse label x from tag %q: %v", tag, err)
 	}
 
-	// In LR layout the polyline runs left→right. Label must be strictly between
+	// In LR layout the edge path runs left→right. Label must be strictly between
 	// the exit x of A (its right border) and the entry x of B (its left border).
 	// Both nodes are nodeWidth=120 wide. A is at rank 0, B at rank 1.
 	// We don't hard-code layout constants — just assert the label is not at either end.
-	if !strings.Contains(out, "<polyline") {
-		t.Fatal("no polyline found; cannot validate midpoint")
+	if !strings.Contains(out, `<path d="M`) {
+		t.Fatal("no edge path found; cannot validate midpoint")
 	}
-	// Extract polyline points to get the edge x range.
-	pIdx := strings.Index(out, `<polyline points="`)
+	// Extract path d to get the edge x range: d="Mx0,y0 Lx1,y1"
+	pIdx := strings.Index(out, `<path d="M`)
 	if pIdx < 0 {
-		t.Fatal("could not find polyline element")
+		t.Fatal("could not find edge path element")
 	}
 	pTag := out[pIdx:]
 	pEnd := strings.Index(pTag, "/>")
 	pTag = pTag[:pEnd]
-	pts := extractAttr(pTag, "points")
-	// pts format: "x0,y0 x1,y1"
+	d := extractAttr(pTag, "d")
+	// d format: "Mx0,y0 Lx1,y1" — parse first M and last L coordinates
 	var x0, y0, x1, y1 float64
-	fmt.Sscanf(pts, "%f,%f %f,%f", &x0, &y0, &x1, &y1)
+	fmt.Sscanf(d, "M%f,%f L%f,%f", &x0, &y0, &x1, &y1)
 	_ = y0
 	_ = y1
 
@@ -269,7 +269,7 @@ func TestEncode_InvisibleEdge_NotRendered(t *testing.T) {
 	f.MustAddNode(&ast.FlowNode{ID: "B", Shape: ast.ShapeRect})
 	f.AddEdge(&ast.FlowEdge{From: "A", To: "B", Style: ast.EdgeInvisible})
 	out := encode(t, f)
-	if strings.Contains(out, "<polyline") || strings.Contains(out, "<polygon") {
+	if strings.Contains(out, `<path d="M`) || strings.Contains(out, "<polygon") {
 		t.Error("invisible edge should not render any line or arrowhead")
 	}
 }

@@ -54,26 +54,54 @@ func TestRendererSVGProducesOutput(t *testing.T) {
 	if !strings.Contains(out, `xmlns="http://www.w3.org/2000/svg"`) {
 		t.Error("expected SVG namespace in output")
 	}
-	if !strings.Contains(out, "<polyline") {
-		t.Error("expected polyline edge in SVG output")
+	if !strings.Contains(out, `<path d="M`) {
+		t.Error("expected path edge in SVG output")
 	}
 }
 
-func TestRendererPNGReturnsUnavailable(t *testing.T) {
+func TestRendererPNGProducesOutput(t *testing.T) {
 	f := ast.NewFlowchart("", ast.DirectionLR)
+	f.MustAddNode(&ast.FlowNode{ID: "A", Shape: ast.ShapeRect})
 	r := newRenderer()
-	_, err := r.RenderBytes(f, diagram.FormatPNG)
+	data, err := r.RenderBytes(f, diagram.FormatPNG)
+	if err != nil {
+		t.Fatalf("RenderBytes png: %v", err)
+	}
+	if len(data) < 8 || data[0] != 0x89 || data[1] != 'P' || data[2] != 'N' || data[3] != 'G' {
+		t.Error("expected PNG magic bytes in output")
+	}
+}
+
+func TestRendererPDFProducesOutput(t *testing.T) {
+	f := ast.NewFlowchart("", ast.DirectionLR)
+	f.MustAddNode(&ast.FlowNode{ID: "A", Shape: ast.ShapeRect})
+	r := newRenderer()
+	data, err := r.RenderBytes(f, diagram.FormatPDF)
+	if err != nil {
+		t.Fatalf("RenderBytes pdf: %v", err)
+	}
+	if len(data) < 5 || string(data[:5]) != "%PDF-" {
+		t.Errorf("expected %%PDF- header, got: %q", data[:min(8, len(data))])
+	}
+}
+
+func TestRendererPNGNonFlowchartFallback(t *testing.T) {
+	// Non-flowchart diagrams fall back via svg.Encode's FallbackFormatError.
+	r := newRenderer()
+	_, err := r.RenderBytes(&fakeSequence{}, diagram.FormatPNG)
 	if err == nil {
-		t.Fatal("expected error for PNG (Phase 4)")
+		t.Fatal("expected error for non-flowchart PNG")
 	}
 	var ferr *diagram.FallbackFormatError
 	if !errors.As(err, &ferr) {
 		t.Fatalf("expected FallbackFormatError, got: %T", err)
 	}
-	if ferr.FallbackFormat() != diagram.FormatHTML {
-		t.Errorf("expected HTML fallback, got: %s", ferr.FallbackFormat())
-	}
 }
+
+type fakeSequence struct{}
+
+func (s *fakeSequence) Type() diagram.DiagramType { return diagram.TypeSequence }
+func (s *fakeSequence) Title() string             { return "" }
 
 func TestRendererHTMLProducesOutput(t *testing.T) {
 	f := ast.NewFlowchart("Phase 2", ast.DirectionLR)

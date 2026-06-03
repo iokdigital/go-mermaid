@@ -64,8 +64,8 @@ func edgeSVG(e *ast.FlowEdge, lr *layoutResult, dir ast.Direction) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(`<polyline points="%s" fill="none" stroke="%s" stroke-width="%.1f" %s/>`,
-		pointsAttr(pts), strokeColor, sw, dash))
+	sb.WriteString(fmt.Sprintf(`<path d="%s" fill="none" stroke="%s" stroke-width="%.1f" %s/>`,
+		pointsToPath(pts), strokeColor, sw, dash))
 
 	if e.Style != ast.EdgeNoArrow && len(pts) >= 2 {
 		last := pts[len(pts)-1]
@@ -174,7 +174,7 @@ func backEdgeSVG(e *ast.FlowEdge, src, dst *nodeLayout, lr *layoutResult, stroke
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb,
-		`<polyline points="%.1f,%.1f %.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="none" stroke="%s" stroke-width="%.1f" stroke-dasharray="5,3"/>`,
+		`<path d="M%.1f,%.1f L%.1f,%.1f L%.1f,%.1f L%.1f,%.1f" fill="none" stroke="%s" stroke-width="%.1f" stroke-dasharray="5,3"/>`,
 		sx, sy, detour, sy, detour, ty, tx+arrowLen, ty, stroke, sw)
 	if e.Style != ast.EdgeNoArrow {
 		sb.WriteString(arrowheadSVG(tx, ty, 0, stroke))
@@ -182,14 +182,20 @@ func backEdgeSVG(e *ast.FlowEdge, src, dst *nodeLayout, lr *layoutResult, stroke
 	return sb.String()
 }
 
-// pointsAttr formats a slice of points as an SVG points attribute value.
-func pointsAttr(pts [][2]float64) string {
+// pointsToPath converts a sequence of points to an SVG path d attribute value
+// using M for the first point and L for subsequent points.
+// Using <path d="M L..."> instead of <polyline> for oksvg PNG rasterizer compatibility.
+func pointsToPath(pts [][2]float64) string {
+	if len(pts) == 0 {
+		return ""
+	}
 	var sb strings.Builder
 	for i, p := range pts {
-		if i > 0 {
-			sb.WriteByte(' ')
+		if i == 0 {
+			fmt.Fprintf(&sb, "M%.1f,%.1f", p[0], p[1])
+		} else {
+			fmt.Fprintf(&sb, " L%.1f,%.1f", p[0], p[1])
 		}
-		fmt.Fprintf(&sb, "%.1f,%.1f", p[0], p[1])
 	}
 	return sb.String()
 }

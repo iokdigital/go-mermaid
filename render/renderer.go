@@ -32,6 +32,8 @@ import (
 	htmlenc "github.com/iokdigital/go-mermaid/html"
 	"github.com/iokdigital/go-mermaid/json"
 	"github.com/iokdigital/go-mermaid/mmd"
+	diapdf "github.com/iokdigital/go-mermaid/pdf"
+	diapng "github.com/iokdigital/go-mermaid/png"
 	"github.com/iokdigital/go-mermaid/svg"
 )
 
@@ -59,11 +61,18 @@ func (r *DefaultRenderer) RenderTo(w io.Writer, d diagram.Diagram, format diagra
 		return r.renderMarkdown(w, d)
 	case diagram.FormatSVG:
 		return svg.Encode(w, d, r.opts)
-	case diagram.FormatPNG, diagram.FormatPDF:
-		return &diagram.FallbackFormatError{
-			Err:      fmt.Errorf("%w: %s (Phase 4)", diagram.ErrRendererNotAvailable, format),
-			Fallback: diagram.FormatHTML,
+	case diagram.FormatPNG:
+		svgData, err := r.RenderBytes(d, diagram.FormatSVG)
+		if err != nil {
+			return err // propagates FallbackFormatError from svg for non-flowchart types
 		}
+		return diapng.Encode(svgData, w, r.opts)
+	case diagram.FormatPDF:
+		svgData, err := r.RenderBytes(d, diagram.FormatSVG)
+		if err != nil {
+			return err
+		}
+		return diapdf.Encode(svgData, w, d.Title(), r.opts)
 	case diagram.FormatHTML:
 		return htmlenc.Encode(w, d, r.opts)
 	default:

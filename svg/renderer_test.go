@@ -239,6 +239,27 @@ func TestEncode_NodeURL_WrappedInAnchor(t *testing.T) {
 	}
 }
 
+func TestEncode_NodeURL_JavaScriptRejected(t *testing.T) {
+	cases := []string{
+		"javascript:alert(1)",
+		"JAVASCRIPT:alert(1)",
+		"  javascript:alert(1)",
+		"data:text/html,<h1>xss</h1>",
+		"vbscript:msgbox(1)",
+	}
+	for _, u := range cases {
+		f := ast.NewFlowchart("", ast.DirectionTB)
+		f.MustAddNode(&ast.FlowNode{ID: "A", Shape: ast.ShapeRect, URL: u})
+		out := encode(t, f)
+		if strings.Contains(out, "<a ") {
+			t.Errorf("URL %q: expected no anchor element for unsafe URL, got one", u)
+		}
+		if strings.Contains(out, "javascript") || strings.Contains(out, "vbscript") {
+			t.Errorf("URL %q: unsafe scheme leaked into SVG output", u)
+		}
+	}
+}
+
 func TestEncode_SelfLoop(t *testing.T) {
 	f := ast.NewFlowchart("", ast.DirectionTB)
 	f.MustAddNode(&ast.FlowNode{ID: "A", Shape: ast.ShapeRect})

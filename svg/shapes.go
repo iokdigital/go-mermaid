@@ -131,12 +131,27 @@ func nodeGroupSVG(n *ast.FlowNode, x, y float64) string {
 	inner.WriteString(label)
 	inner.WriteString(`</g>`)
 
-	if n.URL != "" {
+	if safe := safeURL(n.URL); safe != "" {
 		var outer strings.Builder
-		fmt.Fprintf(&outer, `<a href="%s" target="_blank" rel="noopener noreferrer">`, xmlEscape(n.URL))
+		fmt.Fprintf(&outer, `<a href="%s" target="_blank" rel="noopener noreferrer">`, xmlEscape(safe))
 		outer.WriteString(inner.String())
 		outer.WriteString(`</a>`)
 		return outer.String()
 	}
 	return inner.String()
+}
+
+// safeURL returns u if the scheme is http, https, or relative; returns "" for
+// javascript:, data:, vbscript:, and other dangerous schemes.
+func safeURL(u string) string {
+	if u == "" {
+		return ""
+	}
+	lower := strings.ToLower(strings.TrimSpace(u))
+	for _, blocked := range []string{"javascript:", "data:", "vbscript:"} {
+		if strings.HasPrefix(lower, blocked) {
+			return ""
+		}
+	}
+	return u
 }

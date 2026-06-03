@@ -40,22 +40,22 @@ func TestRendererMarkdown(t *testing.T) {
 	}
 }
 
-func TestRendererSVGReturnsUnavailable(t *testing.T) {
-	f := ast.NewFlowchart("", ast.DirectionLR)
+func TestRendererSVGProducesOutput(t *testing.T) {
+	f := ast.NewFlowchart("Test", ast.DirectionLR)
+	f.MustAddNode(&ast.FlowNode{ID: "A", Label: "Start", Shape: ast.ShapeRect})
+	f.MustAddNode(&ast.FlowNode{ID: "B", Label: "End", Shape: ast.ShapeRect})
+	f.AddEdge(&ast.FlowEdge{From: "A", To: "B", Style: ast.EdgeSolid})
 	r := newRenderer()
-	_, err := r.RenderBytes(f, diagram.FormatSVG)
-	if err == nil {
-		t.Fatal("expected error for SVG (Phase 3)")
+	data, err := r.RenderBytes(f, diagram.FormatSVG)
+	if err != nil {
+		t.Fatalf("RenderBytes svg: %v", err)
 	}
-	var ferr *diagram.FallbackFormatError
-	if !errors.As(err, &ferr) {
-		t.Fatalf("expected FallbackFormatError, got: %T", err)
+	out := string(data)
+	if !strings.Contains(out, `xmlns="http://www.w3.org/2000/svg"`) {
+		t.Error("expected SVG namespace in output")
 	}
-	if ferr.FallbackFormat() != diagram.FormatHTML {
-		t.Errorf("expected HTML fallback, got: %s", ferr.FallbackFormat())
-	}
-	if !errors.Is(err, diagram.ErrRendererNotAvailable) {
-		t.Error("expected ErrRendererNotAvailable in chain")
+	if !strings.Contains(out, "<polyline") {
+		t.Error("expected polyline edge in SVG output")
 	}
 }
 

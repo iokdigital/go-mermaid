@@ -32,6 +32,7 @@ import (
 	htmlenc "github.com/iokdigital/go-mermaid/html"
 	"github.com/iokdigital/go-mermaid/json"
 	"github.com/iokdigital/go-mermaid/mmd"
+	"github.com/iokdigital/go-mermaid/svg"
 )
 
 // DefaultRenderer dispatches rendering to format-specific sub-packages.
@@ -56,9 +57,11 @@ func (r *DefaultRenderer) RenderTo(w io.Writer, d diagram.Diagram, format diagra
 		return json.Encode(w, d)
 	case diagram.FormatMarkdown:
 		return r.renderMarkdown(w, d)
-	case diagram.FormatSVG, diagram.FormatPNG, diagram.FormatPDF:
+	case diagram.FormatSVG:
+		return svg.Encode(w, d, r.opts)
+	case diagram.FormatPNG, diagram.FormatPDF:
 		return &diagram.FallbackFormatError{
-			Err:      fmt.Errorf("%w: %s (Phase 3/4)", diagram.ErrRendererNotAvailable, format),
+			Err:      fmt.Errorf("%w: %s (Phase 4)", diagram.ErrRendererNotAvailable, format),
 			Fallback: diagram.FormatHTML,
 		}
 	case diagram.FormatHTML:

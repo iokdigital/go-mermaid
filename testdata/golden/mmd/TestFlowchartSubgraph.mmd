@@ -1,0 +1,11 @@
+---
+title: Pipeline
+---
+flowchart TB
+  in[Input]
+  out[Output]
+  subgraph sg1 ["Inner"]
+  proc[Process]
+  end
+  in --> proc
+  proc --> out

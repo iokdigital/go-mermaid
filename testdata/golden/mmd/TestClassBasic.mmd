@@ -1,0 +1,12 @@
+---
+title: Component Hierarchy
+---
+classDiagram
+  class Converter {
+    <<interface>>
+    +string Convert()
+  }
+  class AlteryxConverter {
+    +string Convert()
+  }
+  AlteryxConverter <|.. Converter

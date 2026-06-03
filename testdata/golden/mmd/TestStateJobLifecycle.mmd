@@ -1,0 +1,9 @@
+---
+title: Job Lifecycle
+---
+stateDiagram-v2
+  [*] --> Pending
+  Pending --> Running : start
+  Running --> Complete : done
+  Running --> Failed : error
+  Complete --> [*]

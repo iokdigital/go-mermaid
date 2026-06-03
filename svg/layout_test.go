@@ -1,6 +1,7 @@
 package svg
 
 import (
+	"fmt"
 	"testing"
 
 	diagram "github.com/iokdigital/go-mermaid"
@@ -179,4 +180,37 @@ func TestLayout_InvisibleEdgesExcluded(t *testing.T) {
 	if lr.nodes["A"].rank != 0 || lr.nodes["B"].rank != 0 {
 		t.Errorf("invisible edge should not affect rank: A=%d B=%d", lr.nodes["A"].rank, lr.nodes["B"].rank)
 	}
+}
+
+// BenchmarkLayout50Nodes measures layout time for a 50-node linear chain.
+// FRD §10.6 target: < 5 ms.
+func BenchmarkLayout50Nodes(b *testing.B) {
+	f := makeLinearChain(50)
+	opts := defaultOpts()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		runLayout(f, opts, 40, 8000, 6000)
+	}
+}
+
+// BenchmarkLayout200Nodes measures layout time for a 200-node linear chain.
+// FRD §10.6 target: < 50 ms.
+func BenchmarkLayout200Nodes(b *testing.B) {
+	f := makeLinearChain(200)
+	opts := defaultOpts()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		runLayout(f, opts, 40, 8000, 6000)
+	}
+}
+
+func makeLinearChain(n int) *ast.FlowchartDiagram {
+	f := ast.NewFlowchart("", ast.DirectionTB)
+	for i := 0; i < n; i++ {
+		f.MustAddNode(&ast.FlowNode{ID: fmt.Sprintf("N%d", i), Shape: ast.ShapeRect})
+	}
+	for i := 0; i < n-1; i++ {
+		f.AddEdge(&ast.FlowEdge{From: fmt.Sprintf("N%d", i), To: fmt.Sprintf("N%d", i+1), Style: ast.EdgeSolid})
+	}
+	return f
 }

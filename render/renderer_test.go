@@ -2,6 +2,7 @@ package render_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	diagram "github.com/iokdigital/go-mermaid"
@@ -74,19 +75,22 @@ func TestRendererPNGReturnsUnavailable(t *testing.T) {
 	}
 }
 
-func TestRendererHTMLReturnsUnavailableWithMMDFallback(t *testing.T) {
-	f := ast.NewFlowchart("", ast.DirectionLR)
+func TestRendererHTMLProducesOutput(t *testing.T) {
+	f := ast.NewFlowchart("Phase 2", ast.DirectionLR)
 	r := newRenderer()
-	_, err := r.RenderBytes(f, diagram.FormatHTML)
-	if err == nil {
-		t.Fatal("expected error for HTML (Phase 2)")
+	data, err := r.RenderBytes(f, diagram.FormatHTML)
+	if err != nil {
+		t.Fatalf("RenderBytes html: %v", err)
 	}
-	var ferr *diagram.FallbackFormatError
-	if !errors.As(err, &ferr) {
-		t.Fatalf("expected FallbackFormatError, got: %T", err)
+	got := string(data)
+	if !strings.Contains(got, "<!DOCTYPE html>") {
+		t.Error("expected HTML doctype")
 	}
-	if ferr.FallbackFormat() != diagram.FormatMMD {
-		t.Errorf("expected MMD fallback for HTML-unavailable, got: %s", ferr.FallbackFormat())
+	if !strings.Contains(got, `<pre class="mermaid">`) {
+		t.Error("expected mermaid pre block")
+	}
+	if !strings.Contains(got, "cdn.jsdelivr.net") {
+		t.Error("expected CDN script tag")
 	}
 }
 

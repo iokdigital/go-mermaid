@@ -29,6 +29,7 @@ import (
 
 	diagram "github.com/iokdigital/go-mermaid"
 	"github.com/iokdigital/go-mermaid/dot"
+	htmlenc "github.com/iokdigital/go-mermaid/html"
 	"github.com/iokdigital/go-mermaid/json"
 	"github.com/iokdigital/go-mermaid/mmd"
 )
@@ -61,10 +62,7 @@ func (r *DefaultRenderer) RenderTo(w io.Writer, d diagram.Diagram, format diagra
 			Fallback: diagram.FormatHTML,
 		}
 	case diagram.FormatHTML:
-		return &diagram.FallbackFormatError{
-			Err:      fmt.Errorf("%w: %s (Phase 2)", diagram.ErrRendererNotAvailable, format),
-			Fallback: diagram.FormatMMD,
-		}
+		return htmlenc.Encode(w, d, r.opts)
 	default:
 		return fmt.Errorf("%w: %q", diagram.ErrInvalidFormat, format)
 	}

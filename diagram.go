@@ -68,7 +68,10 @@ type Renderer interface {
 
 // Sentinel errors.
 var (
-	// ErrRendererNotAvailable is returned when a format/type combination is not
+	// ErrInvalidFormat is returned when an unrecognised OutputFormat string is passed.
+	ErrInvalidFormat = errors.New("unrecognised output format")
+
+	// ErrRendererNotAvailable is returned when a valid format/type combination is not
 	// yet implemented. Inspect FallbackFormatError.FallbackFormat() for an alternative.
 	ErrRendererNotAvailable = errors.New("renderer not available for this diagram type and format")
 

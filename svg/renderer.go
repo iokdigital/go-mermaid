@@ -1,5 +1,7 @@
-// Package svg renders FlowchartDiagram AST nodes to standalone SVG 1.1.
-// All other diagram types return a FallbackFormatError with Fallback: FormatHTML.
+// Package svg renders Mermaid AST diagrams to standalone SVG 1.1.
+//
+// Supported diagram types: FlowchartDiagram, StateDiagram, ERDiagram, ClassDiagram,
+// SequenceDiagram.
 //
 // The SVG is self-contained (no external refs, no CSS imports) and uses flat fills
 // compatible with the oksvg rasterizer used in Phase 4 PNG output.
@@ -14,13 +16,26 @@ import (
 	"github.com/iokdigital/go-mermaid/ast"
 )
 
-// Encode writes fc as an SVG document to w.
-// Only *ast.FlowchartDiagram is supported; other types return FallbackFormatError.
+// Encode writes d as an SVG document to w.
+// Supported types: *ast.FlowchartDiagram, *ast.StateDiagram, *ast.ERDiagram,
+// *ast.ClassDiagram, *ast.SequenceDiagram.
+// Unrecognised diagram types return FallbackFormatError with Fallback: FormatHTML.
 func Encode(w io.Writer, d diagram.Diagram, opts diagram.RenderOptions) error {
+	switch v := d.(type) {
+	case *ast.StateDiagram:
+		return encodeState(w, v, opts)
+	case *ast.ERDiagram:
+		return encodeER(w, v, opts)
+	case *ast.ClassDiagram:
+		return encodeClass(w, v, opts)
+	case *ast.SequenceDiagram:
+		return encodeSequence(w, v, opts)
+	}
+
 	fc, ok := d.(*ast.FlowchartDiagram)
 	if !ok {
 		return &diagram.FallbackFormatError{
-			Err:      fmt.Errorf("%w: SVG renderer supports flowchart only", diagram.ErrRendererNotAvailable),
+			Err:      fmt.Errorf("%w: SVG renderer does not support %T", diagram.ErrRendererNotAvailable, d),
 			Fallback: diagram.FormatHTML,
 		}
 	}

@@ -33,6 +33,10 @@ go-mermaid provides a programmatic Go API for building and rendering Mermaid dia
 | ER | `erDiagram` | ✅ | ✅ | ✅ | ✅ | — |
 | Class | `classDiagram` | ✅ | ✅ | ✅ | ✅ | — |
 
+**Phase 2 types** (`pie`, `quadrantChart`, `gantt`, `mindmap`) are defined in the API but
+currently render to Mermaid source only. Use `FormatMMD` or `FormatHTML` for these types.
+SVG/PNG/PDF renderers are planned for a future release.
+
 ---
 
 ## Quick Start
@@ -93,7 +97,7 @@ Output:
 title: My First Diagram
 ---
 flowchart LR
-  A([Start])
+  A(Start)
   B[Process]
   C((End))
   A --> B
@@ -206,7 +210,31 @@ f.AddEdge(&ast.FlowEdge{From: "validate", To: "success", Label: "valid"})
 f.AddEdge(&ast.FlowEdge{From: "validate", To: "fail", Label: "invalid"})
 f.AddEdge(&ast.FlowEdge{From: "fail", To: "creds"})
 
-r.RenderToFile("docs/auth-flow.svg", f, diagram.FormatSVG)
+r := render.NewRenderer(diagram.NewRenderOptions())
+if err := r.RenderToFile("docs/auth-flow.svg", f, diagram.FormatSVG); err != nil {
+    log.Fatal(err)
+}
+```
+
+### Group nodes with subgraphs
+
+```go
+// Group related nodes into visual containers
+f := ast.NewFlowchart("Microservices", ast.DirectionLR)
+f.MustAddNode(&ast.FlowNode{ID: "api", Label: "API Gateway", Shape: ast.ShapeRect})
+f.MustAddNode(&ast.FlowNode{ID: "auth", Label: "Auth Service", Shape: ast.ShapeRect})
+f.MustAddNode(&ast.FlowNode{ID: "users", Label: "User Service", Shape: ast.ShapeRect})
+f.MustAddNode(&ast.FlowNode{ID: "orders", Label: "Order Service", Shape: ast.ShapeRect})
+
+f.AddSubgraph(&ast.Subgraph{ID: "backend", Label: "Backend Services", Nodes: []string{"auth", "users", "orders"}})
+f.AddEdge(&ast.FlowEdge{From: "api", To: "auth"})
+f.AddEdge(&ast.FlowEdge{From: "api", To: "users"})
+f.AddEdge(&ast.FlowEdge{From: "api", To: "orders"})
+
+r := render.NewRenderer(diagram.NewRenderOptions())
+if err := r.RenderToFile("microservices.svg", f, diagram.FormatSVG); err != nil {
+    log.Fatal(err)
+}
 ```
 
 ### Database schema visualization
@@ -242,7 +270,10 @@ e.AddRelation(ast.ERRelation{
     Identifying: true,
 })
 
-r.RenderToFile("schema.svg", e, diagram.FormatSVG)
+r := render.NewRenderer(diagram.NewRenderOptions())
+if err := r.RenderToFile("schema.svg", e, diagram.FormatSVG); err != nil {
+    log.Fatal(err)
+}
 ```
 
 ### Service interaction logs
@@ -269,18 +300,23 @@ s.AddMessage(ast.SeqMessage{
     From: "Order", To: "Inventory", Text: "reserve()", Style: ast.MsgSync, Activate: true,
 })
 
-r.RenderToFile("sequence.svg", s, diagram.FormatSVG)
+r := render.NewRenderer(diagram.NewRenderOptions())
+if err := r.RenderToFile("sequence.svg", s, diagram.FormatSVG); err != nil {
+    log.Fatal(err)
+}
 ```
 
 ### HTTP response with embedded diagram
 
 ```go
-func diagramHandler(w http.ResponseWriter, r *http.Request) {
+// diagramRenderer is safe to reuse across concurrent requests.
+var diagramRenderer = render.NewRenderer(diagram.NewRenderOptions())
+
+func diagramHandler(w http.ResponseWriter, req *http.Request) {
     f := buildServiceMap()
-    
-    w.Header().Set("Content-Type", "image/svg+xml")
-    r := render.NewRenderer(diagram.NewRenderOptions())
-    if err := r.RenderTo(w, f, diagram.FormatSVG); err != nil {
+
+    w.Header().Set("Content-Type", diagramRenderer.ContentType(diagram.FormatSVG))
+    if err := diagramRenderer.RenderTo(w, f, diagram.FormatSVG); err != nil {
         http.Error(w, err.Error(), 500)
     }
 }
@@ -289,21 +325,33 @@ func diagramHandler(w http.ResponseWriter, r *http.Request) {
 ### Embed diagram in Markdown documentation
 
 ```go
-f := buildFlowchart()
+f := ast.NewFlowchart("Example", ast.DirectionLR)
+f.MustAddNode(&ast.FlowNode{ID: "A", Label: "Node A", Shape: ast.ShapeRect})
+f.MustAddNode(&ast.FlowNode{ID: "B", Label: "Node B", Shape: ast.ShapeRect})
+f.AddEdge(&ast.FlowEdge{From: "A", To: "B"})
+
 r := render.NewRenderer(diagram.NewRenderOptions())
-
 md := r.RenderMarkdown(f)
-// md = "```mermaid\nflowchart LR\n...\n```\n"
+// md = "```mermaid\nflowchart LR\n  A[Node A]\n  B[Node B]\n  A --> B\n```\n"
 
-// Write to README or docs
-os.WriteFile("README.md", []byte(md), 0644)
+// Write to a new file (this overwrites any existing content)
+os.WriteFile("diagram.md", []byte(md), 0644)
 ```
 
 ### JSON export for tooling
 
 ```go
 // Export diagram structure for code generation or analysis
-data, _ := r.RenderBytes(d, diagram.FormatJSON)
+f := ast.NewFlowchart("Example", ast.DirectionLR)
+f.MustAddNode(&ast.FlowNode{ID: "A", Label: "Start", Shape: ast.ShapeRoundedRect})
+f.MustAddNode(&ast.FlowNode{ID: "B", Label: "End", Shape: ast.ShapeCircle})
+f.AddEdge(&ast.FlowEdge{From: "A", To: "B"})
+
+r := render.NewRenderer(diagram.NewRenderOptions())
+data, err := r.RenderBytes(f, diagram.FormatJSON)
+if err != nil {
+    log.Fatal(err)
+}
 os.WriteFile("diagram.json", data, 0644)
 ```
 
@@ -314,23 +362,25 @@ os.WriteFile("diagram.json", data, 0644)
 ```go
 r := render.NewRenderer(opts)
 
-// Standard errors
-_, err := r.RenderBytes(d, "invalid-format")
-// → ErrInvalidFormat
+// Invalid format
+_, err := r.RenderBytes(d, "not-a-format")  // returns ErrInvalidFormat
+if errors.Is(err, diagram.ErrInvalidFormat) {
+    // handle unknown format
+}
 
-// Fallback format — some diagram/format combinations aren't yet implemented
-_, err := r.RenderBytes(d, diagram.FormatPNG)  // e.g., sequence diagram PNG
+// Fallback format — Phase 2 types (pie, gantt, etc.) don't yet have SVG/PNG renderers
+_, err := r.RenderBytes(pieDiagram, diagram.FormatSVG)
 var ferr *diagram.FallbackFormatError
 if errors.As(err, &ferr) {
-    // Fall back to HTML
-    data, _ = r.RenderBytes(d, ferr.FallbackFormat())
+    // Fall back to HTML or MMD
+    data, _ = r.RenderBytes(pieDiagram, ferr.FallbackFormat())
 }
 
 // Duplicate node IDs
 _, err := f.AddNode(&ast.FlowNode{ID: "A"})
 // ... later ...
 _, err = f.AddNode(&ast.FlowNode{ID: "A"})
-// → ErrDuplicateNodeID
+// → ErrDuplicateNodeID wrapped in an error describing the duplicate
 ```
 
 ---
@@ -356,6 +406,24 @@ EdgeDotted    // -.->   — dotted arrow
 EdgeThick     // ==>    — thick arrow
 EdgeInvisible // ~~~    — invisible link
 EdgeNoArrow   // ---    — line without arrow
+```
+
+## FlowNode Extended Fields
+
+Beyond `ID`, `Label`, and `Shape`, `FlowNode` supports additional fields:
+
+```go
+node := &ast.FlowNode{
+    ID:         "decision",
+    Label:      "Is Valid?",
+    Shape:      ast.ShapeDiamond,
+    Confidence: 0.85,              // drives fill color in SVG (0.0–1.0)
+    URL:        "https://example.com", // wraps node in <a href> in SVG
+    Metadata:   map[string]string{  // exported in JSON output
+        "source": "validation-service",
+        "version": "2",
+    },
+}
 ```
 
 ---
@@ -402,6 +470,10 @@ All format sub-packages (`mmd`, `svg`, `png`, etc.) are imported by `render` and
 **Q: Why not just generate Mermaid text?**
 
 Building diagrams programmatically in Go gives you type safety, compile-time checking, and the ability to derive diagram content from your domain models (database schemas, API specs, etc.).
+
+**Q: What diagram types are supported?**
+
+All Phase 1 types (flowchart, sequence, state, ER, class) render to all formats (SVG, PNG, PDF, JSON, DOT, HTML, MMD). Phase 2 types (pie, gantt, mindmap, quadrantChart) are defined in the API but currently only render to Mermaid source and HTML. SVG/PNG/PDF output for Phase 2 types is planned.
 
 **Q: Does this require an internet connection?**
 

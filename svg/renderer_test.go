@@ -165,7 +165,9 @@ func TestEncode_EdgeLabel_AtMidpoint(t *testing.T) {
 	d := extractAttr(pTag, "d")
 	// d format: "Mx0,y0 Lx1,y1" — parse first M and last L coordinates
 	var x0, y0, x1, y1 float64
-	fmt.Sscanf(d, "M%f,%f L%f,%f", &x0, &y0, &x1, &y1)
+	if _, err := fmt.Sscanf(d, "M%f,%f L%f,%f", &x0, &y0, &x1, &y1); err != nil {
+		t.Fatalf("failed to parse path data %q: %v", d, err)
+	}
 	_ = y0
 	_ = y1
 

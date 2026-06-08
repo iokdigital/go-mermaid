@@ -54,7 +54,7 @@ func Encode(svgData []byte, w io.Writer, title string, opts diagram.RenderOption
 	// Scale to fit within the usable area, preserving aspect ratio.
 	imgW := info.Width()
 	imgH := info.Height()
-	scale := 1.0
+	var scale float64
 	if imgW/maxW > imgH/maxH {
 		scale = maxW / imgW
 	} else {

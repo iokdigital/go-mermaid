@@ -221,7 +221,7 @@ func classBoxSVG(c ast.DiagramClass, cx, cy float64) string {
 
 	// Methods section.
 	if len(methods) == 0 {
-		curY += classMinSectionH
+		// No methods to render
 	} else {
 		for _, m := range methods {
 			text := classMemberText(m)

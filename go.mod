@@ -1,6 +1,6 @@
 module github.com/iokdigital/go-mermaid
 
-go 1.23
+go 1.25.0
 
 require (
 	github.com/jung-kurt/gofpdf v1.16.2
@@ -10,6 +10,6 @@ require (
 
 require (
 	golang.org/x/image v0.30.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 )

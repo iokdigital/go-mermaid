@@ -29,3 +29,7 @@ vendor/
 
 # Worktrees — never commit working tree checkouts
 .worktrees/
+
+# Graphify AST-based code analysis output (local only, regenerated on demand)
+graphify-out/
+

@@ -1,0 +1,10 @@
+{
+  "name": "pele-diff",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Differential harness: validates go-mermaid .mmd output against the Pele parser.",
+  "type": "module",
+  "dependencies": {
+    "pele": "^1.12.0"
+  }
+}

@@ -29,3 +29,9 @@ vendor/
 
 # Worktrees — never commit working tree checkouts
 .worktrees/
+
+# Pele differential harness
+scripts/pele-diff/node_modules/
+
+# Knowledge graph (generated, local only)
+graphify-out/

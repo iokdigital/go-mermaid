@@ -1,7 +1,7 @@
 // Package svg renders Mermaid AST diagrams to standalone SVG 1.1.
 //
 // Supported diagram types: FlowchartDiagram, StateDiagram, ERDiagram, ClassDiagram,
-// SequenceDiagram.
+// SequenceDiagram, PieDiagram, QuadrantDiagram.
 //
 // The SVG is self-contained (no external refs, no CSS imports) and uses flat fills
 // compatible with the oksvg rasterizer used in Phase 4 PNG output.
@@ -18,7 +18,7 @@ import (
 
 // Encode writes d as an SVG document to w.
 // Supported types: *ast.FlowchartDiagram, *ast.StateDiagram, *ast.ERDiagram,
-// *ast.ClassDiagram, *ast.SequenceDiagram.
+// *ast.ClassDiagram, *ast.SequenceDiagram, *ast.PieDiagram, *ast.QuadrantDiagram.
 // Unrecognised diagram types return FallbackFormatError with Fallback: FormatHTML.
 func Encode(w io.Writer, d diagram.Diagram, opts diagram.RenderOptions) error {
 	switch v := d.(type) {
@@ -30,6 +30,10 @@ func Encode(w io.Writer, d diagram.Diagram, opts diagram.RenderOptions) error {
 		return encodeClass(w, v, opts)
 	case *ast.SequenceDiagram:
 		return encodeSequence(w, v, opts)
+	case *ast.PieDiagram:
+		return encodePie(w, v, opts)
+	case *ast.QuadrantDiagram:
+		return encodeQuadrant(w, v, opts)
 	}
 
 	fc, ok := d.(*ast.FlowchartDiagram)

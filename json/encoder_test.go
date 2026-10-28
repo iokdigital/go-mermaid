@@ -62,6 +62,8 @@ func TestJSONAllDiagramTypes(t *testing.T) {
 		{"state", ast.NewState("State"), "state"},
 		{"er", ast.NewER("ER"), "er"},
 		{"class", ast.NewClass("Class"), "class"},
+		{"pie", ast.NewPie("Pie"), "pie"},
+		{"quadrant", ast.NewQuadrant("Quad"), "quadrant"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -109,5 +111,48 @@ func TestJSONRoundTripAllFields(t *testing.T) {
 	sgs := v["subgraphs"].([]any)
 	if len(sgs) != 1 {
 		t.Errorf("expected 1 subgraph, got: %v", len(sgs))
+	}
+}
+
+func TestJSONPieFields(t *testing.T) {
+	p := ast.NewPie("Fish")
+	p.AddSlice(ast.PieSlice{Label: "Ahi", Value: 386})
+	p.AddSlice(ast.PieSlice{Label: "Ono", Value: 15})
+
+	var v map[string]any
+	if err := stdjson.Unmarshal(encode(t, p), &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	slices, ok := v["slices"].([]any)
+	if !ok || len(slices) != 2 {
+		t.Fatalf("expected 2 slices, got: %v", v["slices"])
+	}
+	s0 := slices[0].(map[string]any)
+	if s0["label"] != "Ahi" || s0["value"] != 386.0 {
+		t.Errorf("unexpected first slice: %v", s0)
+	}
+}
+
+func TestJSONQuadrantFields(t *testing.T) {
+	q := ast.NewQuadrant("Campaigns")
+	q.SetXAxis("Low Reach", "High Reach")
+	q.SetYAxis("Low", "High")
+	q.SetQuadrantLabel(1, "Expand")
+	q.AddPoint(ast.QuadrantPoint{Name: "Campaign A", X: 0.3, Y: 0.6})
+
+	var v map[string]any
+	if err := stdjson.Unmarshal(encode(t, q), &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if v["title"] != "Campaigns" {
+		t.Errorf("expected title, got: %v", v["title"])
+	}
+	points, ok := v["points"].([]any)
+	if !ok || len(points) != 1 {
+		t.Fatalf("expected 1 point, got: %v", v["points"])
+	}
+	pt := points[0].(map[string]any)
+	if pt["name"] != "Campaign A" || pt["x"] != 0.3 || pt["y"] != 0.6 {
+		t.Errorf("unexpected point: %v", pt)
 	}
 }

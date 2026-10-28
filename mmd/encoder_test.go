@@ -242,6 +242,80 @@ func TestERBasic(t *testing.T) {
 	assertGolden(t, encode(t, e))
 }
 
+// ─── Pie ─────────────────────────────────────────────────────────────────────
+
+func TestPieBasic(t *testing.T) {
+	p := ast.NewPie("Fish caught by the crew")
+	p.AddSlice(ast.PieSlice{Label: "ʻAhi", Value: 386})
+	p.AddSlice(ast.PieSlice{Label: "Mahimahi", Value: 85})
+	p.AddSlice(ast.PieSlice{Label: "Ono", Value: 15})
+	assertGolden(t, encode(t, p))
+}
+
+func TestPieSpecialChars(t *testing.T) {
+	p := ast.NewPie(`Catch "report": 2024 & beyond`)
+	p.AddSlice(ast.PieSlice{Label: `a:b | c & "quoted"`, Value: 2.5})
+	p.AddSlice(ast.PieSlice{Label: "plain", Value: 7.5})
+	assertGolden(t, encode(t, p))
+}
+
+func TestPieNegativeValueErrors(t *testing.T) {
+	p := ast.NewPie("")
+	p.AddSlice(ast.PieSlice{Label: "bad", Value: -3})
+	var buf bytes.Buffer
+	if err := mmd.Encode(&buf, p); err == nil {
+		t.Error("expected error for negative pie slice value")
+	}
+}
+
+func TestPieEmpty(t *testing.T) {
+	p := ast.NewPie("Nothing yet")
+	assertGolden(t, encode(t, p))
+}
+
+// ─── Quadrant ────────────────────────────────────────────────────────────────
+
+func TestQuadrantBasic(t *testing.T) {
+	q := ast.NewQuadrant("Reach and engagement of campaigns")
+	q.SetXAxis("Low Reach", "High Reach")
+	q.SetYAxis("Low Engagement", "High Engagement")
+	q.SetQuadrantLabel(1, "We should expand")
+	q.SetQuadrantLabel(2, "Need to promote")
+	q.SetQuadrantLabel(3, "Re-evaluate")
+	q.SetQuadrantLabel(4, "May be improved")
+	q.AddPoint(ast.QuadrantPoint{Name: "Campaign A", X: 0.3, Y: 0.6})
+	q.AddPoint(ast.QuadrantPoint{Name: "Campaign B", X: 0.45, Y: 0.23})
+	assertGolden(t, encode(t, q))
+}
+
+func TestQuadrantSpecialChars(t *testing.T) {
+	q := ast.NewQuadrant(`Q1 "review": growth & risk`)
+	q.SetXAxis("Cost: low", "Cost: high")
+	q.SetQuadrantLabel(1, `Grow "fast" & sustainably`)
+	q.AddPoint(ast.QuadrantPoint{Name: `Alpha: "first" & best`, X: 0.8, Y: 0.9})
+	assertGolden(t, encode(t, q))
+}
+
+func TestQuadrantOutOfRangeErrors(t *testing.T) {
+	for _, pt := range []ast.QuadrantPoint{
+		{Name: "x-high", X: 1.5, Y: 0.5},
+		{Name: "y-neg", X: 0.5, Y: -0.1},
+	} {
+		q := ast.NewQuadrant("")
+		q.AddPoint(pt)
+		var buf bytes.Buffer
+		if err := mmd.Encode(&buf, q); err == nil {
+			t.Errorf("expected error for out-of-range point %+v", pt)
+		}
+	}
+}
+
+func TestQuadrantMinimal(t *testing.T) {
+	q := ast.NewQuadrant("")
+	q.AddPoint(ast.QuadrantPoint{Name: "A", X: 0.3, Y: 0.6})
+	assertGolden(t, encode(t, q))
+}
+
 // ─── Class ───────────────────────────────────────────────────────────────────
 
 func TestClassBasic(t *testing.T) {

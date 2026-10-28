@@ -82,6 +82,10 @@ func TestNewRenderOptions(t *testing.T) {
 	if opts.Layout.RankSpacing != 80 {
 		t.Errorf("expected Layout.RankSpacing 80, got %d", opts.Layout.RankSpacing)
 	}
+
+	if opts.HTMLEngine != diagram.HTMLEnginePele {
+		t.Errorf("expected HTMLEngine %q, got %q", diagram.HTMLEnginePele, opts.HTMLEngine)
+	}
 }
 
 func TestDefaultLayoutOptions(t *testing.T) {

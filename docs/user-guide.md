@@ -42,6 +42,12 @@ at print resolution, so very large diagrams may exceed the default
 \`MaxPNGBytes\` budget — raise it or handle the \`ErrPNGSizeLimitExceeded\`
 fallback (see Render Options above).
 
+PNG images include diagram text labels: after the shape pass, a text overlay
+pass draws each SVG `<text>` run with the embedded Go fonts (pure Go, no
+system fonts needed). Glyph positions come straight from the SVG layout, but
+Go-font advances differ slightly from browser Arial/Helvetica metrics, so
+labels may sit a few pixels off their browser positions.
+
 ---
 
 ## Quick Start

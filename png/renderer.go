@@ -1,9 +1,12 @@
 // Package png rasterizes SVG output from the svg package into PNG images using
 // oksvg + rasterx (pure Go, no CGo, no external binaries).
 //
-// Known limitation: oksvg does not support <text> or <tspan> elements, so PNG
-// output contains shapes and edges but no text labels. Use FormatSVG when
-// labelled output is required.
+// Text labels are rendered by an overlay pass: <text>/<tspan> runs are parsed
+// from the SVG and drawn with golang.org/x/image/font onto the rasterized image.
+// Glyphs use the embedded Go fonts (zero new dependencies).
+// Positions come straight from the SVG layout, but Go-font advances differ
+// slightly from the Arial/Helvetica metrics browsers use, so labels may drift
+// a few pixels relative to browser rendering.
 package png
 
 import (

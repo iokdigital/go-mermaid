@@ -61,6 +61,64 @@ func TestDOTConfidenceFill(t *testing.T) {
 	}
 }
 
+// TestDOTFlowchartRoundtrip encodes the same flowchart AST to both DOT and MMD
+// and checks the two outputs carry the same semantic content (nodes, edges,
+// subgraphs). There is no MMD parser in this repo, so the roundtrip is
+// a dual-encoding consistency check rather than a decode comparison.
+func TestDOTFlowchartRoundtrip(t *testing.T) {
+	f := ast.NewFlowchart("Checkout Flow", ast.DirectionLR)
+	f.MustAddNode(&ast.FlowNode{ID: "A", Label: "Start", Shape: ast.ShapeRect})
+	f.MustAddNode(&ast.FlowNode{ID: "B", Label: "Decide", Shape: ast.ShapeDiamond})
+	f.MustAddNode(&ast.FlowNode{ID: "C", Label: "Done", Shape: ast.ShapeRoundedRect})
+	f.AddSubgraph(&ast.Subgraph{ID: "sg1", Label: "Inner", Nodes: []string{"B"}})
+	f.AddEdge(&ast.FlowEdge{From: "A", To: "B", Label: "check", Style: ast.EdgeSolid})
+	f.AddEdge(&ast.FlowEdge{From: "B", To: "C", Label: "ok", Style: ast.EdgeDotted})
+
+	var dotBuf bytes.Buffer
+	if err := dot.Encode(&dotBuf, f); err != nil {
+		t.Fatalf("dot.Encode: %v", err)
+	}
+	var mmdBuf bytes.Buffer
+	if err := mmd.Encode(&mmdBuf, f); err != nil {
+		t.Fatalf("mmd.Encode: %v", err)
+	}
+	dotOut, mmdOut := dotBuf.String(), mmdBuf.String()
+
+	if !strings.Contains(mmdOut, "flowchart LR") {
+		t.Errorf("mmd output missing flowchart LR header:\n%s", mmdOut)
+	}
+
+	// Every semantic token must appear in both encodings.
+	for _, token := range []string{
+		"Start", "Decide", "Done", "check", "ok",
+		"Inner", "Checkout Flow",
+	} {
+		if !strings.Contains(dotOut, token) {
+			t.Errorf("dot output missing %q:\n%s", token, dotOut)
+		}
+		if !strings.Contains(mmdOut, token) {
+			t.Errorf("mmd output missing %q:\n%s", token, mmdOut)
+		}
+	}
+	// Direction maps to rankdir; subgraphs become clusters; dotted edges
+	// render dashed.
+	for _, token := range []string{"rankdir=LR", "cluster_sg1", "style=dashed"} {
+		if !strings.Contains(dotOut, token) {
+			t.Errorf("dot output missing %q:\n%s", token, dotOut)
+		}
+	}
+
+	// The render call-site must accept flowchart diagrams for DOT output.
+	r := render.NewRenderer(diagram.NewRenderOptions())
+	data, err := r.RenderBytes(f, diagram.FormatDOT)
+	if err != nil {
+		t.Fatalf("RenderBytes DOT: %v", err)
+	}
+	if len(data) == 0 || !strings.Contains(string(data), "digraph") {
+		t.Errorf("renderer DOT output invalid:\n%s", string(data))
+	}
+}
+
 func TestDOTUnsupportedTypeReturnsError(t *testing.T) {
 	// Flowchart, sequence, state, ER, and class diagrams are supported; other
 	// types (e.g. pie) are not.

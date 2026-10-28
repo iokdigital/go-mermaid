@@ -18,7 +18,7 @@ func TestFlowchartAllFormats(t *testing.T) {
 
 	formats := []diagram.OutputFormat{
 		diagram.FormatMMD, diagram.FormatSVG, diagram.FormatHTML,
-		diagram.FormatPDF, diagram.FormatJSON, diagram.FormatDOT,
+		diagram.FormatPNG, diagram.FormatPDF, diagram.FormatJSON, diagram.FormatDOT,
 		diagram.FormatMarkdown,
 	}
 
@@ -43,7 +43,7 @@ func TestSequenceAllFormats(t *testing.T) {
 
 	formats := []diagram.OutputFormat{
 		diagram.FormatMMD, diagram.FormatSVG, diagram.FormatHTML,
-		diagram.FormatJSON, diagram.FormatMarkdown,
+		diagram.FormatPNG, diagram.FormatJSON, diagram.FormatMarkdown,
 	}
 
 	for _, fmt := range formats {
@@ -67,7 +67,7 @@ func TestStateAllFormats(t *testing.T) {
 
 	formats := []diagram.OutputFormat{
 		diagram.FormatMMD, diagram.FormatSVG, diagram.FormatHTML,
-		diagram.FormatJSON, diagram.FormatMarkdown,
+		diagram.FormatPNG, diagram.FormatJSON, diagram.FormatMarkdown,
 	}
 
 	for _, fmt := range formats {
@@ -97,7 +97,7 @@ func TestERAllFormats(t *testing.T) {
 
 	formats := []diagram.OutputFormat{
 		diagram.FormatMMD, diagram.FormatSVG, diagram.FormatHTML,
-		diagram.FormatJSON, diagram.FormatMarkdown,
+		diagram.FormatPNG, diagram.FormatJSON, diagram.FormatMarkdown,
 	}
 
 	for _, fmt := range formats {
@@ -124,7 +124,7 @@ func TestClassAllFormats(t *testing.T) {
 
 	formats := []diagram.OutputFormat{
 		diagram.FormatMMD, diagram.FormatSVG, diagram.FormatHTML,
-		diagram.FormatJSON, diagram.FormatMarkdown,
+		diagram.FormatPNG, diagram.FormatJSON, diagram.FormatMarkdown,
 	}
 
 	for _, fmt := range formats {

@@ -3,12 +3,16 @@ package png_test
 import (
 	"bytes"
 	"errors"
+	"image"
 	"testing"
 
 	diagram "github.com/iokdigital/go-mermaid"
 	"github.com/iokdigital/go-mermaid/ast"
 	diapng "github.com/iokdigital/go-mermaid/png"
 	"github.com/iokdigital/go-mermaid/svg"
+
+	// Register PNG decoder for dimension assertions.
+	_ "image/png"
 )
 
 func svgOf(t *testing.T, d diagram.Diagram) []byte {
@@ -99,6 +103,74 @@ func TestEncode_ZeroLimitMeansNoLimit(t *testing.T) {
 	var buf bytes.Buffer
 	if err := diapng.Encode(svgData, &buf, opts); err != nil {
 		t.Errorf("expected no error with limit=0, got: %v", err)
+	}
+}
+
+// TestEncode_AllDiagramTypes is a render smoke test: every AST diagram type
+// supported by svg.Encode must rasterize to a decodable PNG with positive
+// dimensions. This pins the PNG call-site (render FormatPNG → svg → png)
+// to the full supported-type matrix.
+func TestEncode_AllDiagramTypes(t *testing.T) {
+	flow := ast.NewFlowchart("", ast.DirectionLR)
+	flow.MustAddNode(&ast.FlowNode{ID: "A", Shape: ast.ShapeRect})
+
+	seq := ast.NewSequence("", false)
+	seq.AddParticipant(ast.Participant{Alias: "A", Kind: ast.ParticipantBox})
+	seq.AddParticipant(ast.Participant{Alias: "B", Kind: ast.ParticipantBox})
+	seq.AddMessage(ast.SeqMessage{From: "A", To: "B", Text: "hi", Style: ast.MsgSync})
+
+	state := ast.NewState("")
+	state.AddState(ast.DiagramState{ID: "Idle", Kind: ast.StateNormal})
+	state.AddTransition(ast.StateTransition{From: "[*]", To: "Idle"})
+
+	er := ast.NewER("")
+	er.AddEntity(ast.EREntity{Name: "USER"})
+	er.AddRelation(ast.ERRelation{
+		From: "USER", To: "ORDER",
+		FromCard: ast.CardExactOne, ToCard: ast.CardZeroMany,
+		Label: "places", Identifying: true,
+	})
+
+	class := ast.NewClass("")
+	class.AddClass(ast.DiagramClass{Name: "Foo"})
+	class.AddRelation(ast.ClassRelation{From: "Foo", To: "Bar", Kind: ast.RelAssociation})
+
+	cases := []struct {
+		name string
+		d    diagram.Diagram
+	}{
+		{"flowchart", flow},
+		{"sequence", seq},
+		{"state", state},
+		{"er", er},
+		{"class", class},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svgData := svgOf(t, tc.d)
+			var buf bytes.Buffer
+			if err := diapng.Encode(svgData, &buf, diagram.NewRenderOptions()); err != nil {
+				t.Fatalf("Encode(%s): %v", tc.name, err)
+			}
+			assertPNGDecodable(t, buf.Bytes())
+		})
+	}
+}
+
+// assertPNGDecodable checks PNG magic bytes and that the image decodes with
+// positive width and height.
+func assertPNGDecodable(t *testing.T, data []byte) {
+	t.Helper()
+	if len(data) < 8 || data[0] != 0x89 || data[1] != 'P' || data[2] != 'N' || data[3] != 'G' {
+		t.Fatalf("output does not start with PNG magic bytes, got: %x", data[:min(8, len(data))])
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("PNG output does not decode: %v", err)
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		t.Errorf("expected positive PNG dimensions, got %dx%d", cfg.Width, cfg.Height)
 	}
 }
 

@@ -20,7 +20,7 @@ No Node.js, no Chromium, no external processes.
 
 Phase 1: `flowchart`, `sequenceDiagram`, `stateDiagram-v2`, `erDiagram`, `classDiagram`
 
-Phase 2: `pie`, `quadrantChart`, `mindmap` (done); `gantt` (planned)
+Phase 2: `pie`, `quadrantChart`, `mindmap`, `gantt` (all done)
 
 ## Requirements
 

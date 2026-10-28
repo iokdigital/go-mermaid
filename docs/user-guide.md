@@ -35,10 +35,12 @@ go-mermaid provides a programmatic Go API for building and rendering Mermaid dia
 | Pie | `pie` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Quadrant | `quadrantChart` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Mindmap | `mindmap` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Gantt | `gantt` | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**Remaining Phase 2 type** (`gantt`) is defined in the API but
-currently renders to Mermaid source only. Use `FormatMMD` or `FormatHTML` for this type.
-SVG/PNG/PDF renderers are planned for a future release.
+All nine diagram types render to every text and image format. PDF rasterizes
+at print resolution, so very large diagrams may exceed the default
+\`MaxPNGBytes\` budget — raise it or handle the \`ErrPNGSizeLimitExceeded\`
+fallback (see Render Options above).
 
 ---
 
@@ -483,7 +485,7 @@ Building diagrams programmatically in Go gives you type safety, compile-time che
 
 **Q: What diagram types are supported?**
 
-All Phase 1 types (flowchart, sequence, state, ER, class) plus pie, quadrantChart, and mindmap render to SVG, PNG, PDF, JSON, HTML, MMD, and DOT. The remaining Phase 2 type (gantt) is defined in the API but currently only renders to Mermaid source and HTML. SVG/PNG/PDF output for that type is planned.
+All Phase 1 types (flowchart, sequence, state, ER, class) plus pie, quadrantChart, mindmap, and gantt render to SVG, PNG, PDF, JSON, HTML, MMD, and DOT.
 
 **Q: Does this require an internet connection?**
 

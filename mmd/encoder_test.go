@@ -368,6 +368,53 @@ func TestMindmapEmpty(t *testing.T) {
 	assertGolden(t, encode(t, m))
 }
 
+// ─── Gantt ───────────────────────────────────────────────────────────────────
+
+func ganttFixture() *ast.GanttDiagram {
+	g := ast.NewGantt("Migration plan")
+	g.SetDateFormat("YYYY-MM-DD")
+	infra := ast.NewGanttSection("Infra")
+	infra.AddTask(ast.GanttTask{Name: "Provision DB", ID: "db", Start: "2014-01-01", End: "10d"})
+	infra.AddTask(ast.GanttTask{Name: "Cutover", Tags: []ast.GanttTag{ast.TagCrit, ast.TagMilestone}, ID: "cut", Start: "after db", End: "0d"})
+	g.AddSection(*infra)
+	app := ast.NewGanttSection("App")
+	app.AddTask(ast.GanttTask{Name: "Deploy", Tags: []ast.GanttTag{ast.TagActive}, Start: "2014-01-06", End: "2014-01-12"})
+	app.AddTask(ast.GanttTask{Name: "Verify", Tags: []ast.GanttTag{ast.TagDone}, Start: "after cut", End: "2014-01-20"})
+	g.AddSection(*app)
+	return g
+}
+
+func TestGanttBasic(t *testing.T) {
+	assertGolden(t, encode(t, ganttFixture()))
+}
+
+func TestGanttSpecialChars(t *testing.T) {
+	g := ast.NewGantt(`Q1 "review": growth & risk <2026>`)
+	g.SetDateFormat("YYYY-MM-DD")
+	g.SetAxisFormat("%m/%d")
+	s := ast.NewGanttSection("Phase 1: setup & go-live")
+	s.AddTask(ast.GanttTask{Name: `Say "hi" | Buy milk, eggs & [fix]`, ID: "t1", Start: "2014-01-01", End: "5d"})
+	s.AddTask(ast.GanttTask{Name: "Follow-up", Start: "after t1", End: "until t3"})
+	s.AddTask(ast.GanttTask{Name: "Done marker", Tags: []ast.GanttTag{ast.TagDone, ast.TagCrit}, ID: "t3", Start: "2014-01-10", End: "2014-01-12"})
+	g.AddSection(*s)
+	assertGolden(t, encode(t, g))
+}
+
+func TestGanttUngroupedAndMinimal(t *testing.T) {
+	g := ast.NewGantt("")
+	g.AddTask(ast.GanttTask{Name: "Solo", Start: "2014-01-01", End: "1d"})
+	assertGolden(t, encode(t, g))
+}
+
+func TestGanttResolveErrors(t *testing.T) {
+	g := ast.NewGantt("")
+	g.AddTask(ast.GanttTask{Name: "Bad", Start: "after missing", End: "5d"})
+	var buf bytes.Buffer
+	if err := mmd.Encode(&buf, g); err == nil {
+		t.Error("expected error for unknown after reference")
+	}
+}
+
 func TestMindmapBraces(t *testing.T) {
 	m := ast.NewMindmap("")
 	root := ast.NewMindNode("a{{b}} and {c}")

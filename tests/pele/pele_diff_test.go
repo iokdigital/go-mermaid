@@ -178,6 +178,15 @@ func edgeCase() []struct {
 	mmRoot.AddChild(deep)
 	mm.SetRoot(mmRoot)
 
+	gg := ast.NewGantt(`Sprint "42": plan & <ship>`)
+	gg.SetDateFormat("YYYY-MM-DD")
+	gg.SetAxisFormat("%m/%d")
+	gs := ast.NewGanttSection("Phase 1: build & test")
+	gs.AddTask(ast.GanttTask{Name: `Kick "off": now?`, ID: "k", Start: "2014-01-01", End: "3d"})
+	gs.AddTask(ast.GanttTask{Name: "Build [core]", Start: "after k", End: "until m"})
+	gs.AddTask(ast.GanttTask{Name: "Ship it", Tags: []ast.GanttTag{ast.TagCrit, ast.TagMilestone}, ID: "m", Start: "2014-01-10", End: "0d"})
+	gg.AddSection(*gs)
+
 	return []struct {
 		name string
 		d    diagram.Diagram
@@ -190,6 +199,7 @@ func edgeCase() []struct {
 		{"escaping-pie", pc},
 		{"escaping-quadrant", qd},
 		{"escaping-mindmap", mm},
+		{"escaping-gantt", gg},
 	}
 }
 

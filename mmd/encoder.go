@@ -35,6 +35,8 @@ func Encode(w io.Writer, d diagram.Diagram) error {
 		return encodeQuadrant(w, v)
 	case *ast.MindmapDiagram:
 		return encodeMindmap(w, v)
+	case *ast.GanttDiagram:
+		return encodeGantt(w, v)
 	default:
 		return fmt.Errorf("mmd: %w: %T", diagram.ErrInvalidFormat, d)
 	}
@@ -655,4 +657,53 @@ func encodeMindNode(w io.Writer, n *ast.MindNode, depth int, st *mindEncodeState
 	for _, c := range n.Children {
 		encodeMindNode(w, c, depth+1, st)
 	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Gantt
+// ────────────────────────────────────────────────────────────────────────────
+
+func encodeGantt(w io.Writer, g *ast.GanttDiagram) error {
+	// Resolve first: validates task IDs, tags, dates, durations, and
+	// after/until references with clear errors before emitting anything.
+	if _, err := g.Resolve(); err != nil {
+		return fmt.Errorf("mmd: %w", err)
+	}
+	writeTitle(w, g.Title())
+	fmt.Fprintln(w, "gantt")
+
+	if f := g.DateFormat(); f != "" {
+		fmt.Fprintf(w, "  dateFormat %s\n", f)
+	}
+	if f := g.AxisFormat(); f != "" {
+		fmt.Fprintf(w, "  axisFormat %s\n", f)
+	}
+	for _, t := range g.Tasks() {
+		encodeGanttTask(w, t, "  ")
+	}
+	for _, s := range g.Sections() {
+		fmt.Fprintf(w, "  section %s\n", oneLine(s.Name))
+		for _, t := range s.Tasks {
+			encodeGanttTask(w, t, "    ")
+		}
+	}
+	return nil
+}
+
+// oneLine flattens newlines that would break indentation-based syntax.
+func oneLine(s string) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	return strings.ReplaceAll(s, "\r", " ")
+}
+
+func encodeGanttTask(w io.Writer, t ast.GanttTask, indent string) {
+	parts := make([]string, 0, 5)
+	for _, tag := range t.Tags {
+		parts = append(parts, string(tag))
+	}
+	if t.ID != "" {
+		parts = append(parts, t.ID)
+	}
+	parts = append(parts, strings.TrimSpace(t.Start), strings.TrimSpace(t.End))
+	fmt.Fprintf(w, "%s%s : %s\n", indent, oneLine(t.Name), strings.Join(parts, ", "))
 }

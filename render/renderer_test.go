@@ -150,9 +150,9 @@ func TestRendererPNGAllDiagramTypes(t *testing.T) {
 }
 
 func TestRendererPNGUnsupportedTypeFallback(t *testing.T) {
-	// Diagram types with no AST support (e.g. gantt/mindmap, which have no
-	// ast struct and no svg renderer) fall back via svg.Encode's
-	// FallbackFormatError.
+	// Unrecognised concrete diagram types (a fake that is not one of the
+	// ast structs, even though it reports a known DiagramType) fall back
+	// via svg.Encode's FallbackFormatError.
 	r := newRenderer()
 	_, err := r.RenderBytes(&fakeGantt{}, diagram.FormatPNG)
 	if err == nil {

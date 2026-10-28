@@ -159,7 +159,7 @@ const (
     FormatHTML     OutputFormat = "html"      // Standalone HTML
     FormatPDF      OutputFormat = "pdf"      // PDF document
     FormatJSON     OutputFormat = "json"     // Diagram AST as JSON
-    FormatDOT      OutputFormat = "dot"      // Graphviz DOT (flowchart only)
+    FormatDOT      OutputFormat = "dot"      // Graphviz DOT (flowchart, sequence)
     FormatMarkdown OutputFormat = "md"       // Markdown with fenced code block
 )
 ```

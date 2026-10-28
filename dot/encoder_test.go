@@ -62,12 +62,12 @@ func TestDOTConfidenceFill(t *testing.T) {
 }
 
 func TestDOTNonFlowchartReturnsError(t *testing.T) {
-	// Flowchart, sequence, and state diagrams are supported; ER diagrams are not.
-	e := ast.NewER("unsupported")
+	// Flowchart, sequence, state, and ER diagrams are supported; class diagrams are not.
+	c := ast.NewClass("unsupported")
 	var buf bytes.Buffer
-	err := dot.Encode(&buf, e)
+	err := dot.Encode(&buf, c)
 	if err == nil {
-		t.Fatal("expected error for non-flowchart/non-sequence/non-state type")
+		t.Fatal("expected error for non-flowchart/non-sequence/non-state/non-ER type")
 	}
 	var ferr *diagram.FallbackFormatError
 	if !errors.As(err, &ferr) {
@@ -434,6 +434,175 @@ func TestDOTStateRoundtrip(t *testing.T) {
 	// The render call-site must accept state diagrams for DOT output.
 	r := render.NewRenderer(diagram.NewRenderOptions())
 	data, err := r.RenderBytes(s, diagram.FormatDOT)
+	if err != nil {
+		t.Fatalf("RenderBytes DOT: %v", err)
+	}
+	if len(data) == 0 || !strings.Contains(string(data), "digraph") {
+		t.Errorf("renderer DOT output invalid:\n%s", string(data))
+	}
+}
+
+// ─── ER ──────────────────────────────────────────────────────────────────────
+
+func TestDOTERBasic(t *testing.T) {
+	e := ast.NewER("Shop Schema")
+	e.AddEntity(ast.EREntity{
+		Name: "users",
+		Attributes: []ast.ERAttribute{
+			{DataType: "uuid", Name: "id", Keys: []ast.ERKey{ast.KeyPrimary}},
+			{DataType: "varchar", Name: "email"},
+		},
+	})
+	e.AddEntity(ast.EREntity{Name: "orders"})
+	e.AddRelation(ast.ERRelation{
+		From: "users", To: "orders",
+		FromCard: ast.CardOneMany, ToCard: ast.CardZeroOne,
+		Label: "places", Identifying: true,
+	})
+
+	got := encode(t, e)
+	if !strings.HasPrefix(got, "digraph {") {
+		t.Errorf("expected digraph open, got: %q", got[:min(50, len(got))])
+	}
+	if !strings.Contains(got, "rankdir=TB") {
+		t.Error("expected rankdir=TB")
+	}
+	if !strings.Contains(got, `label="Shop Schema"`) {
+		t.Error("expected title label attribute")
+	}
+	for _, want := range []string{
+		"shape=record", "users", "orders",
+		"uuid id PK", "varchar email",
+		"users -> orders", `label="places"`,
+		"arrowhead=none",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output:\n%s", want, got)
+		}
+	}
+	// Identifying relations render solid: no dashed style on the edge.
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "users -> orders") && strings.Contains(line, "style=dashed") {
+			t.Errorf("identifying relation must not be dashed:\n%s", line)
+		}
+	}
+}
+
+func TestDOTERRelationships(t *testing.T) {
+	e := ast.NewER("")
+	e.AddEntity(ast.EREntity{Name: "users"})
+	e.AddEntity(ast.EREntity{Name: "orders"})
+	e.AddEntity(ast.EREntity{Name: "items"})
+	e.AddRelation(ast.ERRelation{
+		From: "users", To: "orders",
+		FromCard: ast.CardOneMany, ToCard: ast.CardZeroOne,
+		Label: "places", Identifying: true,
+	})
+	e.AddRelation(ast.ERRelation{
+		From: "orders", To: "items",
+		FromCard: ast.CardExactOne, ToCard: ast.CardZeroMany,
+		Label: "contains", Identifying: false,
+	})
+	// Relation-only entity: emitted so every edge endpoint exists.
+	e.AddRelation(ast.ERRelation{
+		From: "items", To: "ghost",
+		FromCard: ast.CardExactOne, ToCard: ast.CardZeroOne,
+		Label: "haunts", Identifying: true,
+	})
+
+	got := encode(t, e)
+	for _, want := range []string{
+		`taillabel="}|"`, `headlabel="|o"`,
+		`taillabel="||"`, `headlabel="}o"`,
+		`label="contains"`, "style=dashed",
+		`"ghost" shape=box`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output:\n%s", want, got)
+		}
+	}
+}
+
+func TestDOTERRecordEscaping(t *testing.T) {
+	e := ast.NewER("")
+	e.AddEntity(ast.EREntity{
+		Name: "we|ird",
+		Attributes: []ast.ERAttribute{
+			{DataType: "str{ing}", Name: "a<b>c"},
+		},
+	})
+
+	got := encode(t, e)
+	for _, want := range []string{`we\|ird`, `str\{ing\}`, `a\<b\>c`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected escaped %q in output:\n%s", want, got)
+		}
+	}
+}
+
+// TestDOTERRoundtrip encodes the same ER AST to both DOT and MMD
+// and checks the two outputs carry the same semantic content (entities,
+// attributes, relations, cardinalities). There is no MMD parser in this repo,
+// so the roundtrip is a dual-encoding consistency check rather than a decode
+// comparison.
+func TestDOTERRoundtrip(t *testing.T) {
+	e := ast.NewER("Shop Schema")
+	e.AddEntity(ast.EREntity{
+		Name: "users",
+		Attributes: []ast.ERAttribute{
+			{DataType: "uuid", Name: "id", Keys: []ast.ERKey{ast.KeyPrimary}},
+			{DataType: "varchar", Name: "email", Keys: []ast.ERKey{ast.KeyUnique}},
+		},
+	})
+	e.AddEntity(ast.EREntity{
+		Name: "orders",
+		Attributes: []ast.ERAttribute{
+			{DataType: "uuid", Name: "id", Keys: []ast.ERKey{ast.KeyPrimary}},
+			{DataType: "uuid", Name: "user_id", Keys: []ast.ERKey{ast.KeyForeign}},
+		},
+	})
+	e.AddRelation(ast.ERRelation{
+		From: "users", To: "orders",
+		FromCard: ast.CardOneMany, ToCard: ast.CardZeroOne,
+		Label: "places", Identifying: true,
+	})
+
+	var dotBuf bytes.Buffer
+	if err := dot.Encode(&dotBuf, e); err != nil {
+		t.Fatalf("dot.Encode: %v", err)
+	}
+	var mmdBuf bytes.Buffer
+	if err := mmd.Encode(&mmdBuf, e); err != nil {
+		t.Fatalf("mmd.Encode: %v", err)
+	}
+	dotOut, mmdOut := dotBuf.String(), mmdBuf.String()
+
+	if !strings.Contains(mmdOut, "erDiagram") {
+		t.Errorf("mmd output missing erDiagram header:\n%s", mmdOut)
+	}
+
+	// Every semantic token must appear in both encodings.
+	for _, token := range []string{
+		"users", "orders", "uuid id PK", "varchar email UK",
+		"uuid user_id FK", "places", "Shop Schema",
+	} {
+		if !strings.Contains(dotOut, token) {
+			t.Errorf("dot output missing %q:\n%s", token, dotOut)
+		}
+		if !strings.Contains(mmdOut, token) {
+			t.Errorf("mmd output missing %q:\n%s", token, mmdOut)
+		}
+	}
+	// Cardinality symbols appear verbatim in DOT taillabel/headlabel.
+	for _, token := range []string{`taillabel="}|"`, `headlabel="|o"`} {
+		if !strings.Contains(dotOut, token) {
+			t.Errorf("dot output missing %q:\n%s", token, dotOut)
+		}
+	}
+
+	// The render call-site must accept ER diagrams for DOT output.
+	r := render.NewRenderer(diagram.NewRenderOptions())
+	data, err := r.RenderBytes(e, diagram.FormatDOT)
 	if err != nil {
 		t.Fatalf("RenderBytes DOT: %v", err)
 	}

@@ -64,6 +64,7 @@ func TestJSONAllDiagramTypes(t *testing.T) {
 		{"class", ast.NewClass("Class"), "class"},
 		{"pie", ast.NewPie("Pie"), "pie"},
 		{"quadrant", ast.NewQuadrant("Quad"), "quadrant"},
+		{"mindmap", ast.NewMindmap("Mind"), "mindmap"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -154,5 +155,63 @@ func TestJSONQuadrantFields(t *testing.T) {
 	pt := points[0].(map[string]any)
 	if pt["name"] != "Campaign A" || pt["x"] != 0.3 || pt["y"] != 0.6 {
 		t.Errorf("unexpected point: %v", pt)
+	}
+}
+
+func TestJSONMindmapFields(t *testing.T) {
+	m := ast.NewMindmap("Topics")
+	root := ast.NewMindNode("root")
+	kid := ast.NewMindNode("Kid")
+	kid.Shape = ast.ShapeCircle
+	root.AddChild(kid)
+	m.SetRoot(root)
+
+	var v map[string]any
+	if err := stdjson.Unmarshal(encode(t, m), &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if v["type"] != "mindmap" {
+		t.Errorf("expected type=mindmap, got: %v", v["type"])
+	}
+	r, ok := v["root"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected root object, got: %v", v["root"])
+	}
+	if r["label"] != "root" {
+		t.Errorf("expected root label, got: %v", r["label"])
+	}
+	children, ok := r["children"].([]any)
+	if !ok || len(children) != 1 {
+		t.Fatalf("expected 1 child, got: %v", r["children"])
+	}
+	c0 := children[0].(map[string]any)
+	if c0["label"] != "Kid" || c0["shape"] != "circle" {
+		t.Errorf("unexpected child: %v", c0)
+	}
+}
+
+func TestJSONMindmapEmpty(t *testing.T) {
+	m := ast.NewMindmap("Nothing")
+
+	var v map[string]any
+	if err := stdjson.Unmarshal(encode(t, m), &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, present := v["root"]; present {
+		t.Errorf("expected no root field, got: %v", v["root"])
+	}
+}
+
+func TestJSONMindmapCycleTerminates(t *testing.T) {
+	m := ast.NewMindmap("")
+	a := ast.NewMindNode("A")
+	b := ast.NewMindNode("B")
+	a.AddChild(b)
+	b.AddChild(a) // misuse: must not hang the encoder
+	m.SetRoot(a)
+
+	raw := encode(t, m)
+	if !stdjson.Valid(raw) {
+		t.Errorf("invalid JSON: %s", raw)
 	}
 }

@@ -202,6 +202,34 @@ func TestQuadrantAllFormats(t *testing.T) {
 	}
 }
 
+func TestMindmapAllFormats(t *testing.T) {
+	r := render.NewRenderer(diagram.NewRenderOptions())
+	m := ast.NewMindmap("Test")
+	root := ast.NewMindNode("root")
+	root.AddChild(ast.NewMindNode("Alpha"))
+	beta := ast.NewMindNode("Beta")
+	beta.AddChild(ast.NewMindNode("Beta one"))
+	root.AddChild(beta)
+	m.SetRoot(root)
+
+	formats := []diagram.OutputFormat{
+		diagram.FormatMMD, diagram.FormatSVG, diagram.FormatHTML,
+		diagram.FormatPNG, diagram.FormatPDF, diagram.FormatJSON,
+		diagram.FormatDOT, diagram.FormatMarkdown,
+	}
+
+	for _, fmt := range formats {
+		data, err := r.RenderBytes(m, fmt)
+		if err != nil {
+			t.Errorf("Mindmap + %v: %v", fmt, err)
+			continue
+		}
+		if len(data) == 0 {
+			t.Errorf("Mindmap + %v: empty output", fmt)
+		}
+	}
+}
+
 func TestSVGContainsNamespace(t *testing.T) {
 	r := render.NewRenderer(diagram.NewRenderOptions())
 	f := ast.NewFlowchart("", ast.DirectionTB)

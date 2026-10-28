@@ -316,6 +316,125 @@ func TestQuadrantMinimal(t *testing.T) {
 	assertGolden(t, encode(t, q))
 }
 
+// ─── Mindmap ─────────────────────────────────────────────────────────────────
+
+func mindmapFixture() *ast.MindmapDiagram {
+	m := ast.NewMindmap("Hawaiian Islands")
+	root := ast.NewMindNode("Hawaiʻi")
+	history := ast.NewMindNode("History")
+	history.AddChild(ast.NewMindNode("Old legends"))
+	voyaging := ast.NewMindNode("Voyaging")
+	voyaging.Shape = ast.ShapeCircle
+	history.AddChild(voyaging)
+	root.AddChild(history)
+	nature := ast.NewMindNode("Nature")
+	nature.Shape = ast.ShapeRect
+	mountains := ast.NewMindNode("Mountains and volcanoes")
+	mountains.Shape = ast.ShapeHexagon
+	nature.AddChild(mountains)
+	nature.AddChild(ast.NewMindNode("Ocean life"))
+	root.AddChild(nature)
+	return m.SetRoot(root)
+}
+
+func TestMindmapBasic(t *testing.T) {
+	assertGolden(t, encode(t, mindmapFixture()))
+}
+
+func TestMindmapSpecialChars(t *testing.T) {
+	m := ast.NewMindmap(`Q1 "review": growth & risk <2026>`)
+	root := ast.NewMindNode("Root & branch")
+	root.AddChild(ast.NewMindNode(`Say "hi" | a: b`))
+	brackets := ast.NewMindNode("a[b] (c)")
+	root.AddChild(brackets)
+	shaped := ast.NewMindNode(`quoted "shape"`)
+	shaped.Shape = ast.ShapeCircle
+	shaped.ID = "my id"
+	root.AddChild(shaped)
+	multiline := ast.NewMindNode("line1\nline2")
+	root.AddChild(multiline)
+	m.SetRoot(root)
+	assertGolden(t, encode(t, m))
+}
+
+func TestMindmapMinimal(t *testing.T) {
+	m := ast.NewMindmap("")
+	m.SetRoot(ast.NewMindNode("root"))
+	assertGolden(t, encode(t, m))
+}
+
+func TestMindmapEmpty(t *testing.T) {
+	m := ast.NewMindmap("Nothing yet")
+	assertGolden(t, encode(t, m))
+}
+
+func TestMindmapBraces(t *testing.T) {
+	m := ast.NewMindmap("")
+	root := ast.NewMindNode("a{{b}} and {c}")
+	root.AddChild(ast.NewMindNode("plain"))
+	m.SetRoot(root)
+	assertGolden(t, encode(t, m))
+}
+
+func TestMindmapCycleTerminates(t *testing.T) {
+	m := ast.NewMindmap("")
+	a := ast.NewMindNode("A")
+	b := ast.NewMindNode("B")
+	a.AddChild(b)
+	b.AddChild(a) // misuse: must not hang the encoder
+	m.SetRoot(a)
+	var buf bytes.Buffer
+	if err := mmd.Encode(&buf, m); err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if buf.Len() == 0 {
+		t.Error("expected non-empty output for cyclic graph")
+	}
+}
+
+func TestMindmapNilChildIgnored(t *testing.T) {
+	n := ast.NewMindNode("A")
+	n.AddChild(nil)
+	if len(n.Children) != 0 {
+		t.Errorf("expected nil child to be ignored, got %d children", len(n.Children))
+	}
+}
+
+func TestMindmapWhitespaceLabelPlaceholder(t *testing.T) {
+	m := ast.NewMindmap("")
+	m.SetRoot(ast.NewMindNode("  \n "))
+	var buf bytes.Buffer
+	if err := mmd.Encode(&buf, m); err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	// "(empty)" itself needs delimiters, so it renders entity-escaped.
+	if !strings.Contains(buf.String(), "#40;empty#41;") {
+		t.Errorf("expected whitespace label to become (empty), got:\n%s", buf.String())
+	}
+}
+
+func TestMindmapAutoIDCollisionAvoided(t *testing.T) {
+	m := ast.NewMindmap("")
+	root := ast.NewMindNode("root [needs id]")
+	root.AddChild(ast.NewMindNode("explicit"))
+	explicit := ast.NewMindNode("has id")
+	explicit.ID = "m1" // collides with the first auto-id
+	root.AddChild(explicit)
+	m.SetRoot(root)
+	var buf bytes.Buffer
+	if err := mmd.Encode(&buf, m); err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	out := buf.String()
+	// The explicit m1 keeps its id; the auto id must skip to m2.
+	if strings.Count(out, "m1") != 1 {
+		t.Errorf("expected exactly one m1 reference, got:\n%s", out)
+	}
+	if !strings.Contains(out, "m2") {
+		t.Errorf("expected auto-id to skip to m2, got:\n%s", out)
+	}
+}
+
 // ─── Class ───────────────────────────────────────────────────────────────────
 
 func TestClassBasic(t *testing.T) {

@@ -162,6 +162,22 @@ func edgeCase() []struct {
 	qd.AddPoint(ast.QuadrantPoint{Name: `Alpha: "first"`, X: 0.8, Y: 0.9})
 	qd.AddPoint(ast.QuadrantPoint{Name: "Beta & co", X: 0.2, Y: 0.3})
 
+	mm := ast.NewMindmap(`Mind "map": growth & <change>`)
+	mmRoot := ast.NewMindNode("Root & branch")
+	mmRoot.AddChild(ast.NewMindNode(`Say "hi" | a: b`))
+	mmRoot.AddChild(ast.NewMindNode("a[b] (c)"))
+	braces := ast.NewMindNode("a{{b}} and {c}")
+	mmRoot.AddChild(braces)
+	shaped := ast.NewMindNode(`quoted "node"`)
+	shaped.Shape = ast.ShapeCircle
+	shaped.ID = "my id"
+	mmRoot.AddChild(shaped)
+	mmRoot.AddChild(ast.NewMindNode("line1\nline2"))
+	deep := ast.NewMindNode("deep")
+	deep.AddChild(ast.NewMindNode("deeper"))
+	mmRoot.AddChild(deep)
+	mm.SetRoot(mmRoot)
+
 	return []struct {
 		name string
 		d    diagram.Diagram
@@ -173,6 +189,7 @@ func edgeCase() []struct {
 		{"escaping-class", cl},
 		{"escaping-pie", pc},
 		{"escaping-quadrant", qd},
+		{"escaping-mindmap", mm},
 	}
 }
 

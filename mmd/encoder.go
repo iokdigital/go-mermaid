@@ -33,6 +33,8 @@ func Encode(w io.Writer, d diagram.Diagram) error {
 		return encodePie(w, v)
 	case *ast.QuadrantDiagram:
 		return encodeQuadrant(w, v)
+	case *ast.MindmapDiagram:
+		return encodeMindmap(w, v)
 	default:
 		return fmt.Errorf("mmd: %w: %T", diagram.ErrInvalidFormat, d)
 	}
@@ -533,4 +535,124 @@ func encodeQuadrant(w io.Writer, q *ast.QuadrantDiagram) error {
 			strconv.FormatFloat(p.Y, 'f', -1, 64))
 	}
 	return nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Mindmap
+// ────────────────────────────────────────────────────────────────────────────
+
+// mindShapeSyntax returns the Mermaid bracket pair for a mindmap node shape.
+// Only Circle, Rect, RoundedRect (and the zero value), and Hexagon have
+// mindmap syntax; other flowchart shapes fall back to rounded parentheses.
+func mindShapeSyntax(s ast.NodeShape) (open, close string) {
+	switch s {
+	case ast.ShapeCircle:
+		return "((", "))"
+	case ast.ShapeRect:
+		return "[", "]"
+	case ast.ShapeHexagon:
+		return "{{", "}}"
+	default:
+		return "(", ")"
+	}
+}
+
+// escapeMindLabel escapes characters that break mindmap label parsing inside
+// id[form] labels: brackets and parens end the label, and braces would open a
+// new shape, so they become numeric entities (verified against Pele/Mermaid
+// 12.1.0). Quotes, ampersands, colons, and angle brackets need no escaping in
+// either form.
+func escapeMindLabel(s string) string {
+	s = strings.ReplaceAll(s, "[", "#91;")
+	s = strings.ReplaceAll(s, "]", "#93;")
+	s = strings.ReplaceAll(s, "(", "#40;")
+	s = strings.ReplaceAll(s, ")", "#41;")
+	s = strings.ReplaceAll(s, "{", "#123;")
+	return strings.ReplaceAll(s, "}", "#125;")
+}
+
+func encodeMindmap(w io.Writer, m *ast.MindmapDiagram) error {
+	writeTitle(w, m.Title())
+	fmt.Fprintln(w, "mindmap")
+	if m.Root() == nil {
+		return nil
+	}
+	st := &mindEncodeState{used: mindExplicitIDs(m.Root()), seen: make(map[*ast.MindNode]bool)}
+	encodeMindNode(w, m.Root(), 1, st)
+	return nil
+}
+
+// mindEncodeState carries the auto-id counter and cycle guard across the
+// recursive mindmap encoding. Trees must be acyclic; a repeated node is
+// emitted once and subsequent references are dropped.
+type mindEncodeState struct {
+	counter int
+	used    map[string]bool
+	seen    map[*ast.MindNode]bool
+}
+
+// mindExplicitIDs collects sanitized explicit node IDs so auto-generated ids
+// cannot collide with them.
+func mindExplicitIDs(root *ast.MindNode) map[string]bool {
+	used := make(map[string]bool)
+	seen := make(map[*ast.MindNode]bool)
+	var walk func(n *ast.MindNode)
+	walk = func(n *ast.MindNode) {
+		if n == nil || seen[n] {
+			return
+		}
+		seen[n] = true
+		if n.ID != "" {
+			used[ast.SanitizeID(n.ID)] = true
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(root)
+	return used
+}
+
+func (st *mindEncodeState) autoID() string {
+	for {
+		st.counter++
+		id := fmt.Sprintf("m%d", st.counter)
+		if !st.used[id] {
+			st.used[id] = true
+			return id
+		}
+	}
+}
+
+func encodeMindNode(w io.Writer, n *ast.MindNode, depth int, st *mindEncodeState) {
+	if n == nil || st.seen[n] {
+		return
+	}
+	st.seen[n] = true
+	indent := strings.Repeat("  ", depth)
+	// Newlines would break the indentation structure; whitespace-only labels
+	// would vanish, so both flatten to a placeholder like empty labels.
+	label := strings.ReplaceAll(n.Label, "\n", " ")
+	label = strings.ReplaceAll(label, "\r", " ")
+	if strings.TrimSpace(label) == "" {
+		label = "(empty)"
+	}
+	// Bare labels carry no shape: they need the id[form] when an explicit ID
+	// or a non-default shape is set, or when brackets, parens, or braces
+	// would terminate the bare text.
+	needsDelim := n.ID != "" || (n.Shape != "" && n.Shape != ast.ShapeRoundedRect) ||
+		strings.ContainsAny(label, "()[]{}")
+	if !needsDelim {
+		fmt.Fprintf(w, "%s%s\n", indent, label)
+	} else {
+		id := n.ID
+		if id == "" {
+			id = st.autoID()
+		}
+		open, close := mindShapeSyntax(n.Shape)
+		fmt.Fprintf(w, "%s%s%s%s%s\n", indent, ast.SanitizeID(id), open, escapeMindLabel(label), close)
+	}
+	for _, c := range n.Children {
+		encodeMindNode(w, c, depth+1, st)
+	}
 }

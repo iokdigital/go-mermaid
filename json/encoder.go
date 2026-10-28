@@ -39,6 +39,8 @@ func marshal(d diagram.Diagram) (any, error) {
 		return marshalPie(v), nil
 	case *ast.QuadrantDiagram:
 		return marshalQuadrant(v), nil
+	case *ast.MindmapDiagram:
+		return marshalMindmap(v), nil
 	default:
 		return nil, fmt.Errorf("json: %w: %T", diagram.ErrInvalidFormat, d)
 	}
@@ -484,4 +486,55 @@ func marshalQuadrant(q *ast.QuadrantDiagram) quadrantJSON {
 		Quadrants: q.Quadrants(),
 		Points:    points,
 	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Mindmap
+// ────────────────────────────────────────────────────────────────────────────
+
+type mindmapJSON struct {
+	Type  string        `json:"type"`
+	Title string        `json:"title,omitempty"`
+	Root  *mindNodeJSON `json:"root,omitempty"`
+}
+
+type mindNodeJSON struct {
+	ID       string         `json:"id,omitempty"`
+	Label    string         `json:"label"`
+	Shape    string         `json:"shape,omitempty"`
+	Children []mindNodeJSON `json:"children,omitempty"`
+}
+
+func marshalMindmap(m *ast.MindmapDiagram) mindmapJSON {
+	if m.Root() == nil {
+		return mindmapJSON{Type: string(diagram.TypeMindMap), Title: m.Title()}
+	}
+	return mindmapJSON{
+		Type:  string(diagram.TypeMindMap),
+		Title: m.Title(),
+		Root:  marshalMindNode(m.Root()),
+	}
+}
+
+func marshalMindNode(n *ast.MindNode) *mindNodeJSON {
+	out := &mindNodeJSON{
+		ID:    n.ID,
+		Label: n.Label,
+		Shape: string(n.Shape),
+	}
+	seen := map[*ast.MindNode]bool{n: true}
+	var walk func(src *ast.MindNode, dst *mindNodeJSON)
+	walk = func(src *ast.MindNode, dst *mindNodeJSON) {
+		for _, c := range src.Children {
+			if c == nil || seen[c] {
+				continue
+			}
+			seen[c] = true
+			child := mindNodeJSON{ID: c.ID, Label: c.Label, Shape: string(c.Shape)}
+			dst.Children = append(dst.Children, child)
+			walk(c, &dst.Children[len(dst.Children)-1])
+		}
+	}
+	walk(n, out)
+	return out
 }

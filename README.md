@@ -8,7 +8,7 @@ No Node.js, no Chromium, no external processes.
 | Format | Extension | Notes |
 |--------|-----------|-------|
 | Mermaid source | `.mmd` | All diagram types |
-| SVG | `.svg` | Flowchart (Phase 1); others Phase 2 |
+| SVG | `.svg` | Flowchart, sequence, state, ER, class, pie, quadrant |
 | PNG | `.png` | Via pure-Go SVG rasterizer |
 | HTML | `.html` | All types via mermaid.js CDN |
 | PDF | `.pdf` | Flowchart via go-pdf/fpdf |
@@ -20,7 +20,7 @@ No Node.js, no Chromium, no external processes.
 
 Phase 1: `flowchart`, `sequenceDiagram`, `stateDiagram-v2`, `erDiagram`, `classDiagram`
 
-Phase 2: `pie`, `quadrantChart`, `gantt`, `mindmap`
+Phase 2: `pie`, `quadrantChart` (done); `gantt`, `mindmap` (planned)
 
 ## Requirements
 

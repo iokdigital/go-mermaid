@@ -139,6 +139,69 @@ func TestClassAllFormats(t *testing.T) {
 	}
 }
 
+func TestPieAllFormats(t *testing.T) {
+	r := render.NewRenderer(diagram.NewRenderOptions())
+	p := ast.NewPie("Test")
+	p.AddSlice(ast.PieSlice{Label: "A", Value: 3})
+	p.AddSlice(ast.PieSlice{Label: "B", Value: 1})
+
+	formats := []diagram.OutputFormat{
+		diagram.FormatMMD, diagram.FormatSVG, diagram.FormatHTML,
+		diagram.FormatPNG, diagram.FormatPDF, diagram.FormatJSON,
+		diagram.FormatDOT, diagram.FormatMarkdown,
+	}
+
+	for _, fmt := range formats {
+		data, err := r.RenderBytes(p, fmt)
+		if err != nil {
+			t.Errorf("Pie + %v: %v", fmt, err)
+			continue
+		}
+		if len(data) == 0 {
+			t.Errorf("Pie + %v: empty output", fmt)
+		}
+	}
+}
+
+func TestQuadrantAllFormats(t *testing.T) {
+	// The fixed quadrant grid rasterized at PDF print resolution exceeds
+	// the default MaxPNGBytes budget, so PDF runs with the guard disabled.
+	// Budget enforcement itself is pinned by the negative tests.
+	pdfOpts := diagram.NewRenderOptions()
+	pdfOpts.MaxPNGBytes = 0
+	rPDF := render.NewRenderer(pdfOpts)
+
+	r := render.NewRenderer(diagram.NewRenderOptions())
+	q := ast.NewQuadrant("Test")
+	q.SetXAxis("Low", "High")
+	q.SetYAxis("Low", "High")
+	q.SetQuadrantLabel(1, "Top right")
+	q.AddPoint(ast.QuadrantPoint{Name: "A", X: 0.3, Y: 0.6})
+
+	formats := []diagram.OutputFormat{
+		diagram.FormatMMD, diagram.FormatSVG, diagram.FormatHTML,
+		diagram.FormatPNG, diagram.FormatJSON, diagram.FormatDOT,
+		diagram.FormatMarkdown,
+	}
+
+	for _, fmt := range formats {
+		data, err := r.RenderBytes(q, fmt)
+		if err != nil {
+			t.Errorf("Quadrant + %v: %v", fmt, err)
+			continue
+		}
+		if len(data) == 0 {
+			t.Errorf("Quadrant + %v: empty output", fmt)
+		}
+	}
+
+	if data, err := rPDF.RenderBytes(q, diagram.FormatPDF); err != nil {
+		t.Errorf("Quadrant + pdf (guard disabled): %v", err)
+	} else if len(data) == 0 {
+		t.Error("Quadrant + pdf: empty output")
+	}
+}
+
 func TestSVGContainsNamespace(t *testing.T) {
 	r := render.NewRenderer(diagram.NewRenderOptions())
 	f := ast.NewFlowchart("", ast.DirectionTB)

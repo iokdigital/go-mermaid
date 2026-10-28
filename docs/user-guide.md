@@ -32,8 +32,10 @@ go-mermaid provides a programmatic Go API for building and rendering Mermaid dia
 | State | `stateDiagram-v2` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ER | `erDiagram` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Class | `classDiagram` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Pie | `pie` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Quadrant | `quadrantChart` | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-**Phase 2 types** (`pie`, `quadrantChart`, `gantt`, `mindmap`) are defined in the API but
+**Remaining Phase 2 types** (`gantt`, `mindmap`) are defined in the API but
 currently render to Mermaid source only. Use `FormatMMD` or `FormatHTML` for these types.
 SVG/PNG/PDF renderers are planned for a future release.
 
@@ -183,8 +185,15 @@ opts.Layout.NodeSpacingH = 60
 opts.Layout.NodeSpacingV = 40
 opts.Layout.RankSpacing = 80
 
-// Air-gapped: use your own mermaid.js CDN
-opts.CDNOverrideURL = "https://internal.cdn/mermaid.min.js"
+// Size guard: PNG/PDF renderers estimate RGBA bytes before rasterizing and
+// return ErrPNGSizeLimitExceeded (with an HTML fallback) past the budget.
+// PDF always rasterizes at print resolution, so large diagrams may need a
+// higher budget (0 disables the guard).
+opts.MaxPNGBytes = 10_000_000 // default
+
+// Air-gapped: use your own renderer CDN (Pele primary, mermaid.js fallback)
+opts.CDNOverrideURL = "https://internal.cdn/pele.global.js"
+opts.HTMLFallbackCDNURL = "https://internal.cdn/mermaid.min.js"
 
 r := render.NewRenderer(opts)
 ```
@@ -368,12 +377,12 @@ if errors.Is(err, diagram.ErrInvalidFormat) {
     // handle unknown format
 }
 
-// Fallback format — Phase 2 types (pie, gantt, etc.) don't yet have SVG/PNG renderers
-_, err := r.RenderBytes(pieDiagram, diagram.FormatSVG)
+// Fallback format — types without an SVG renderer (gantt, mindmap) fall back
+_, err := r.RenderBytes(ganttDiagram, diagram.FormatSVG)
 var ferr *diagram.FallbackFormatError
 if errors.As(err, &ferr) {
     // Fall back to HTML or MMD
-    data, _ = r.RenderBytes(pieDiagram, ferr.FallbackFormat())
+    data, _ = r.RenderBytes(ganttDiagram, ferr.FallbackFormat())
 }
 
 // Duplicate node IDs
@@ -473,11 +482,11 @@ Building diagrams programmatically in Go gives you type safety, compile-time che
 
 **Q: What diagram types are supported?**
 
-All Phase 1 types (flowchart, sequence, state, ER, class) render to SVG, PNG, PDF, JSON, HTML, MMD, and DOT. Phase 2 types (pie, gantt, mindmap, quadrantChart) are defined in the API but currently only render to Mermaid source and HTML. SVG/PNG/PDF output for Phase 2 types is planned.
+All Phase 1 types (flowchart, sequence, state, ER, class) plus pie and quadrantChart render to SVG, PNG, PDF, JSON, HTML, MMD, and DOT. Remaining Phase 2 types (gantt, mindmap) are defined in the API but currently only render to Mermaid source and HTML. SVG/PNG/PDF output for those types is planned.
 
 **Q: Does this require an internet connection?**
 
-Only for HTML output using the default mermaid.js CDN. For air-gapped environments, set `RenderOptions.CDNOverrideURL` to your internal CDN. SVG, PNG, and PDF are fully offline.
+Only for HTML output using the default Pele CDN (with a mermaid.js fallback CDN). For air-gapped environments, set `RenderOptions.CDNOverrideURL` (and `HTMLFallbackCDNURL`) to your internal CDN, or `HTMLEngine: HTMLEngineMermaid` with `CDNOverrideURL` for a mermaid.js-only page. SVG, PNG, and PDF are fully offline.
 
 **Q: Can I customize the diagram appearance?**
 

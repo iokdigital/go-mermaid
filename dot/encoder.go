@@ -1,10 +1,12 @@
-// Package dot encodes flowchart, sequence, state, ER, and class diagram ASTs to Graphviz DOT format.
+// Package dot encodes flowchart, sequence, state, ER, class, pie, and
+// quadrant diagram ASTs to Graphviz DOT format.
 // Other diagram types return ErrRendererNotAvailable.
 package dot
 
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	diagram "github.com/iokdigital/go-mermaid"
@@ -12,8 +14,9 @@ import (
 )
 
 // Encode writes a Graphviz DOT representation of d to w.
-// Flowchart, sequence, state, ER, and class diagrams are supported; other types return a
-// FallbackFormatError wrapping ErrRendererNotAvailable.
+// Flowchart, sequence, state, ER, class, pie, and quadrant diagrams are
+// supported; other types return a FallbackFormatError wrapping
+// ErrRendererNotAvailable.
 func Encode(w io.Writer, d diagram.Diagram) error {
 	switch v := d.(type) {
 	case *ast.FlowchartDiagram:
@@ -26,6 +29,10 @@ func Encode(w io.Writer, d diagram.Diagram) error {
 		return encodeER(w, v)
 	case *ast.ClassDiagram:
 		return encodeClass(w, v)
+	case *ast.PieDiagram:
+		return encodePie(w, v)
+	case *ast.QuadrantDiagram:
+		return encodeQuadrant(w, v)
 	default:
 		return &diagram.FallbackFormatError{
 			Err:      fmt.Errorf("dot: %w: %T", diagram.ErrRendererNotAvailable, d),
@@ -771,4 +778,54 @@ func classEdgeAttrs(r ast.ClassRelation) []string {
 		attrs = append(attrs, fmt.Sprintf("headlabel=%q", r.CardTo))
 	}
 	return attrs
+}
+
+// encodePie renders pie slices as labelled ellipse nodes. Chart geometry has
+// no DOT equivalent; the slice data is preserved in node labels.
+func encodePie(w io.Writer, p *ast.PieDiagram) error {
+	fmt.Fprintln(w, "digraph {")
+	fmt.Fprintln(w, "  rankdir=TB;")
+	if title := p.Title(); title != "" {
+		fmt.Fprintf(w, "  label=%q;\n", title)
+		fmt.Fprintln(w, "  labelloc=t;")
+	}
+	fmt.Fprintln(w, "  node [fontname=Helvetica shape=ellipse];")
+
+	for i, s := range p.Slices() {
+		label := s.Label
+		if label == "" {
+			label = fmt.Sprintf("slice %d", i+1)
+		}
+		fmt.Fprintf(w, "  slice_%d [label=%q];\n", i,
+			fmt.Sprintf("%s: %s", label, strconv.FormatFloat(s.Value, 'f', -1, 64)))
+	}
+
+	fmt.Fprintln(w, "}")
+	return nil
+}
+
+// encodeQuadrant renders quadrant points as labelled box nodes with their
+// coordinates. Grid geometry has no DOT equivalent.
+func encodeQuadrant(w io.Writer, q *ast.QuadrantDiagram) error {
+	fmt.Fprintln(w, "digraph {")
+	fmt.Fprintln(w, "  rankdir=TB;")
+	if title := q.Title(); title != "" {
+		fmt.Fprintf(w, "  label=%q;\n", title)
+		fmt.Fprintln(w, "  labelloc=t;")
+	}
+	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+
+	for i, p := range q.Points() {
+		label := p.Name
+		if label == "" {
+			label = fmt.Sprintf("point %d", i+1)
+		}
+		fmt.Fprintf(w, "  point_%d [label=%q];\n", i,
+			fmt.Sprintf("%s (%s, %s)", label,
+				strconv.FormatFloat(p.X, 'f', -1, 64),
+				strconv.FormatFloat(p.Y, 'f', -1, 64)))
+	}
+
+	fmt.Fprintln(w, "}")
+	return nil
 }

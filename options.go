@@ -19,10 +19,24 @@ type RenderOptions struct {
 	// Default: 10_000_000 (10 MB). Set to 0 to disable the limit.
 	MaxPNGBytes int64
 
-	// CDNOverrideURL replaces the default mermaid.js CDN URL in HTML output.
+	// CDNOverrideURL replaces the default client-side renderer CDN URL in HTML
+	// output. When HTMLEngine is "pele" (default) it replaces the Pele URL;
+	// when "mermaid" it replaces the mermaid.js URL (legacy behaviour).
 	// Useful for air-gapped environments pointing at an internally hosted copy.
-	// Default: empty (uses https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js).
+	// Default: empty (uses the engine's default jsdelivr URL below).
+	// Must start with "https://" or "http://" when set.
 	CDNOverrideURL string
+
+	// HTMLEngine selects the client-side renderer used in HTML output:
+	// HTMLEnginePele (default) or HTMLEngineMermaid (legacy mermaid.js-only
+	// page, no Pele, no fallback). Empty means HTMLEnginePele.
+	HTMLEngine string
+
+	// HTMLFallbackCDNURL replaces the fallback mermaid.js CDN URL loaded by
+	// HTML output when the Pele CDN script fails to load. Only used when
+	// HTMLEngine is "pele". Default: empty (uses defaultMermaidCDNURL).
+	// Must start with "https://" or "http://" when set.
+	HTMLFallbackCDNURL string
 
 	// SVGPadding is the whitespace added around the diagram content (px). Default: 40.
 	SVGPadding int
@@ -34,6 +48,16 @@ type RenderOptions struct {
 	// Layout fine-tunes the Sugiyama auto-layout algorithm used for flowcharts.
 	Layout LayoutOptions
 }
+
+// HTML engine selectors for RenderOptions.HTMLEngine.
+const (
+	// HTMLEnginePele renders HTML output with Pele (default) and falls back
+	// to mermaid.js when the Pele CDN script fails to load.
+	HTMLEnginePele = "pele"
+
+	// HTMLEngineMermaid renders legacy mermaid.js-only HTML output.
+	HTMLEngineMermaid = "mermaid"
+)
 
 // Resolution is a named PNG output quality preset.
 type Resolution string
@@ -107,6 +131,7 @@ type LayoutOptions struct {
 func NewRenderOptions() RenderOptions {
 	return RenderOptions{
 		Resolution:   ResolutionScreen,
+		HTMLEngine:   HTMLEnginePele,
 		MaxPNGBytes:  10_000_000,
 		SVGPadding:   40,
 		SVGMaxWidth:  8000,

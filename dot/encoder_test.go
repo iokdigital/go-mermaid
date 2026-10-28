@@ -120,10 +120,10 @@ func TestDOTFlowchartRoundtrip(t *testing.T) {
 }
 
 func TestDOTUnsupportedTypeReturnsError(t *testing.T) {
-	// Flowchart, sequence, state, ER, and class diagrams are supported; other
-	// types (e.g. pie) are not.
+	// Flowchart, sequence, state, ER, class, pie, and quadrant diagrams are
+	// supported; other types (e.g. gantt) are not.
 	var buf bytes.Buffer
-	err := dot.Encode(&buf, &fakePieDiagram{})
+	err := dot.Encode(&buf, &fakeGanttDiagram{})
 	if err == nil {
 		t.Fatal("expected error for unsupported diagram type")
 	}
@@ -139,12 +139,12 @@ func TestDOTUnsupportedTypeReturnsError(t *testing.T) {
 	}
 }
 
-// fakePieDiagram stands in for a genuinely unsupported diagram type (Phase 2
-// types have no AST structs in this repo).
-type fakePieDiagram struct{}
+// fakeGanttDiagram stands in for a genuinely unsupported diagram type
+// (gantt and mindmap have no AST structs yet).
+type fakeGanttDiagram struct{}
 
-func (f *fakePieDiagram) Type() diagram.DiagramType { return diagram.TypePie }
-func (f *fakePieDiagram) Title() string             { return "" }
+func (f *fakeGanttDiagram) Type() diagram.DiagramType { return diagram.TypeGantt }
+func (f *fakeGanttDiagram) Title() string             { return "" }
 
 func min(a, b int) int {
 	if a < b {
@@ -914,5 +914,44 @@ func TestDOTClassRoundtrip(t *testing.T) {
 	}
 	if len(data) == 0 || !strings.Contains(string(data), "digraph") {
 		t.Errorf("renderer DOT output invalid:\n%s", string(data))
+	}
+}
+
+// ─── Pie ─────────────────────────────────────────────────────────────────────
+
+func TestDOTPieBasic(t *testing.T) {
+	p := ast.NewPie("Fish")
+	p.AddSlice(ast.PieSlice{Label: "Ahi", Value: 386})
+	p.AddSlice(ast.PieSlice{Label: "Ono", Value: 15})
+
+	got := encode(t, p)
+	if !strings.HasPrefix(got, "digraph {") {
+		t.Errorf("expected digraph open, got: %q", got[:min(50, len(got))])
+	}
+	if !strings.Contains(got, `label="Fish"`) {
+		t.Error("expected title label attribute")
+	}
+	for _, want := range []string{`Ahi: 386`, `Ono: 15`, "slice_0", "slice_1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in DOT output:\n%s", want, got)
+		}
+	}
+}
+
+// ─── Quadrant ────────────────────────────────────────────────────────────────
+
+func TestDOTQuadrantBasic(t *testing.T) {
+	q := ast.NewQuadrant("Campaigns")
+	q.AddPoint(ast.QuadrantPoint{Name: "Campaign A", X: 0.3, Y: 0.6})
+
+	got := encode(t, q)
+	if !strings.HasPrefix(got, "digraph {") {
+		t.Errorf("expected digraph open, got: %q", got[:min(50, len(got))])
+	}
+	if !strings.Contains(got, `label="Campaigns"`) {
+		t.Error("expected title label attribute")
+	}
+	if !strings.Contains(got, "Campaign A (0.3, 0.6)") {
+		t.Errorf("expected point label with coordinates:\n%s", got)
 	}
 }

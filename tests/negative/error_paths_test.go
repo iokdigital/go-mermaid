@@ -257,7 +257,7 @@ func TestPNGUnsupportedDiagramType(t *testing.T) {
 
 type fakeDiagram struct{}
 
-func (f *fakeDiagram) Type() diagram.DiagramType { return diagram.TypePie }
+func (f *fakeDiagram) Type() diagram.DiagramType { return diagram.TypeGantt }
 func (f *fakeDiagram) Title() string             { return "" }
 
 func TestAllEdgeStylesRender(t *testing.T) {

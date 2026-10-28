@@ -7,6 +7,8 @@ package mmd
 import (
 	"fmt"
 	"io"
+	"math"
+	"strconv"
 	"strings"
 
 	diagram "github.com/iokdigital/go-mermaid"
@@ -27,6 +29,10 @@ func Encode(w io.Writer, d diagram.Diagram) error {
 		return encodeER(w, v)
 	case *ast.ClassDiagram:
 		return encodeClass(w, v)
+	case *ast.PieDiagram:
+		return encodePie(w, v)
+	case *ast.QuadrantDiagram:
+		return encodeQuadrant(w, v)
 	default:
 		return fmt.Errorf("mmd: %w: %T", diagram.ErrInvalidFormat, d)
 	}
@@ -47,6 +53,18 @@ func truncateLabel(s string) string {
 		return string(runes[:37]) + "…"
 	}
 	return s
+}
+
+// escapeFlowText escapes characters that would terminate Mermaid flowchart
+// string contexts. Verified against the Pele/Mermaid 12.1.0 grammar:
+//   - '"' ends quoted labels (node ["..."], subgraph ["..."]) and breaks
+//     edge labels (|...| and -- ... ---), so it becomes #quot; (renders as ").
+//   - '|' ends pipe edge labels (|...|), so it becomes #124; (renders as |).
+//
+// <, > and & need no escaping inside these contexts.
+func escapeFlowText(s string) string {
+	s = strings.ReplaceAll(s, `"`, "#quot;")
+	return strings.ReplaceAll(s, "|", "#124;")
 }
 
 // mirrorCardinality converts a left-side Cardinality to its right-side Mermaid equivalent.
@@ -101,7 +119,7 @@ func encodeFlowchart(w io.Writer, f *ast.FlowchartDiagram) error {
 	for _, sg := range f.Subgraphs() {
 		sgID := ast.SanitizeID(sg.ID)
 		if sg.Label != "" {
-			fmt.Fprintf(w, "  subgraph %s [\"%s\"]\n", sgID, sg.Label)
+			fmt.Fprintf(w, "  subgraph %s [\"%s\"]\n", sgID, escapeFlowText(sg.Label))
 		} else {
 			fmt.Fprintf(w, "  subgraph %s\n", sgID)
 		}
@@ -128,13 +146,17 @@ func encodeFlowchart(w io.Writer, f *ast.FlowchartDiagram) error {
 
 func writeFlowNode(w io.Writer, n *ast.FlowNode) {
 	id := ast.SanitizeID(n.ID)
-	label := truncateLabel(n.Label)
-	if label == "" {
-		label = n.ID
+	raw := truncateLabel(n.Label)
+	if raw == "" {
+		raw = n.ID
 	}
+	// Quote decision uses the raw label: escaped text (#quot;/#124;) carries
+	// no quoting triggers, but the raw specials still require quoting.
+	quoted := needsQuote(raw)
+	label := escapeFlowText(raw)
 	open, close := ast.NodeShapeSyntax(n.Shape)
 	// Quote labels that contain special Mermaid characters.
-	if needsQuote(label) {
+	if quoted {
 		fmt.Fprintf(w, "  %s%s\"%s\"%s\n", id, open, label, close)
 	} else {
 		fmt.Fprintf(w, "  %s%s%s%s\n", id, open, label, close)
@@ -145,6 +167,13 @@ func writeFlowEdge(w io.Writer, e *ast.FlowEdge) {
 	from := ast.SanitizeID(e.From)
 	to := ast.SanitizeID(e.To)
 
+	// An empty Style defaults to a solid arrow: without an arrow token the
+	// line parses as two adjacent node references and Pele/Mermaid reject it.
+	style := e.Style
+	if style == "" {
+		style = ast.EdgeSolid
+	}
+
 	if e.Style == ast.EdgeInvisible {
 		// Invisible links carry no label.
 		fmt.Fprintf(w, "  %s ~~~ %s\n", from, to)
@@ -152,15 +181,16 @@ func writeFlowEdge(w io.Writer, e *ast.FlowEdge) {
 	}
 
 	if e.Label == "" {
-		fmt.Fprintf(w, "  %s %s %s\n", from, string(e.Style), to)
+		fmt.Fprintf(w, "  %s %s %s\n", from, string(style), to)
 		return
 	}
 
+	label := escapeFlowText(e.Label)
 	// EdgeNoArrow uses "-- text ---" syntax; all other styles use "|text|".
-	if e.Style == ast.EdgeNoArrow {
-		fmt.Fprintf(w, "  %s -- %s --- %s\n", from, e.Label, to)
+	if style == ast.EdgeNoArrow {
+		fmt.Fprintf(w, "  %s -- %s --- %s\n", from, label, to)
 	} else {
-		fmt.Fprintf(w, "  %s %s|%s| %s\n", from, string(e.Style), e.Label, to)
+		fmt.Fprintf(w, "  %s %s|%s| %s\n", from, string(style), label, to)
 	}
 }
 
@@ -187,10 +217,16 @@ func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
 	}
 	for _, p := range s.Participants() {
 		alias := p.Alias
+		// An empty Kind defaults to `participant`: without the keyword the
+		// line parses as a message and Pele/Mermaid reject it.
+		kind := p.Kind
+		if kind == "" {
+			kind = ast.ParticipantBox
+		}
 		if p.Label != "" && p.Label != p.Alias {
-			fmt.Fprintf(w, "  %s %s as %s\n", string(p.Kind), alias, p.Label)
+			fmt.Fprintf(w, "  %s %s as %s\n", string(kind), alias, p.Label)
 		} else {
-			fmt.Fprintf(w, "  %s %s\n", string(p.Kind), alias)
+			fmt.Fprintf(w, "  %s %s\n", string(kind), alias)
 		}
 	}
 	encodeSeqMessages(w, s.Messages(), "  ")
@@ -223,13 +259,19 @@ func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
 
 func encodeSeqMessages(w io.Writer, msgs []ast.SeqMessage, indent string) {
 	for _, m := range msgs {
+		// An empty Style defaults to a synchronous message: without an
+		// arrow token the line does not parse.
+		style := m.Style
+		if style == "" {
+			style = ast.MsgSync
+		}
 		target := m.To
 		if m.Activate {
 			target = target + "+"
 		} else if m.Deactivate {
 			target = target + "-"
 		}
-		fmt.Fprintf(w, "%s%s%s%s: %s\n", indent, m.From, string(m.Style), target, m.Text)
+		fmt.Fprintf(w, "%s%s%s%s: %s\n", indent, m.From, string(style), target, m.Text)
 	}
 }
 
@@ -304,21 +346,25 @@ func encodeER(w io.Writer, e *ast.ERDiagram) error {
 	fmt.Fprintln(w, "erDiagram")
 
 	for _, en := range e.Entities() {
+		name := ast.SanitizeID(en.Name)
 		if len(en.Attributes) == 0 {
-			fmt.Fprintf(w, "  %s\n", en.Name)
+			fmt.Fprintf(w, "  %s\n", name)
 			continue
 		}
-		fmt.Fprintf(w, "  %s {\n", en.Name)
+		fmt.Fprintf(w, "  %s {\n", name)
 		for _, attr := range en.Attributes {
+			// Attribute names are bare words in the ER grammar: spaces and
+			// quotes break parsing, so sanitize to [A-Za-z0-9_-].
+			// Comments are "..."-quoted: escape embedded quotes as #quot;.
 			keys := ""
 			for _, k := range attr.Keys {
 				keys += " " + string(k)
 			}
 			comment := ""
 			if attr.Comment != "" {
-				comment = " \"" + attr.Comment + "\""
+				comment = " \"" + strings.ReplaceAll(attr.Comment, `"`, "#quot;") + "\""
 			}
-			fmt.Fprintf(w, "    %s %s%s%s\n", attr.DataType, attr.Name, keys, comment)
+			fmt.Fprintf(w, "    %s %s%s%s\n", attr.DataType, ast.SanitizeID(attr.Name), keys, comment)
 		}
 		fmt.Fprintln(w, "  }")
 	}
@@ -333,8 +379,14 @@ func encodeER(w io.Writer, e *ast.ERDiagram) error {
 		if label == "" {
 			label = "relates"
 		}
+		// Relation labels are unquoted `: label`. A bare & breaks parsing,
+		// so labels containing &, " or : are "..."-quoted with #quot;-escaped
+		// quotes (verified against the Pele/Mermaid 12.1.0 grammar).
+		if strings.ContainsAny(label, "&\":") {
+			label = `"` + strings.ReplaceAll(label, `"`, "#quot;") + `"`
+		}
 		fmt.Fprintf(w, "  %s %s%s%s %s : %s\n",
-			r.From, string(r.FromCard), line, right, r.To, label)
+			ast.SanitizeID(r.From), string(r.FromCard), line, right, ast.SanitizeID(r.To), label)
 	}
 	return nil
 }
@@ -377,7 +429,8 @@ func encodeClass(w io.Writer, c *ast.ClassDiagram) error {
 	}
 
 	for _, n := range c.Notes() {
-		fmt.Fprintf(w, "  note for %s \"%s\"\n", n.Class, n.Text)
+		// Notes are "..."-quoted: escape embedded quotes as #quot;.
+		fmt.Fprintf(w, "  note for %s \"%s\"\n", n.Class, strings.ReplaceAll(n.Text, `"`, "#quot;"))
 	}
 	return nil
 }
@@ -400,4 +453,84 @@ func formatClassMember(m ast.ClassMember) string {
 		sb.WriteString("*")
 	}
 	return sb.String()
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pie
+// ────────────────────────────────────────────────────────────────────────────
+
+func encodePie(w io.Writer, p *ast.PieDiagram) error {
+	writeTitle(w, p.Title())
+	fmt.Fprintln(w, "pie")
+
+	for _, s := range p.Slices() {
+		if math.IsNaN(s.Value) || math.IsInf(s.Value, 0) {
+			return fmt.Errorf("mmd: pie slice %q has non-finite value %v", s.Label, s.Value)
+		}
+		if s.Value < 0 {
+			return fmt.Errorf("mmd: pie slice %q has negative value %v", s.Label, s.Value)
+		}
+		// Labels are always "..."-quoted: bare words fail parsing, and ":",
+		// "|", "&" need no escaping inside quotes. Embedded quotes end the
+		// label, so they become #quot; (verified against Pele/Mermaid 12.1.0).
+		fmt.Fprintf(w, "  \"%s\" : %s\n",
+			strings.ReplaceAll(s.Label, `"`, "#quot;"),
+			strconv.FormatFloat(s.Value, 'f', -1, 64))
+	}
+	return nil
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Quadrant
+// ────────────────────────────────────────────────────────────────────────────
+
+// escapeQuadrantText escapes characters that break quadrantChart bare text:
+// ':' ends axis labels and point names, '"' ends quoted point names.
+func escapeQuadrantText(s string) string {
+	s = strings.ReplaceAll(s, `"`, "#quot;")
+	return strings.ReplaceAll(s, ":", "#58;")
+}
+
+func encodeQuadrant(w io.Writer, q *ast.QuadrantDiagram) error {
+	writeTitle(w, q.Title())
+	fmt.Fprintln(w, "quadrantChart")
+
+	if x := q.XAxis(); x[0] != "" || x[1] != "" {
+		if x[1] != "" {
+			fmt.Fprintf(w, "  x-axis %s --> %s\n", escapeQuadrantText(x[0]), escapeQuadrantText(x[1]))
+		} else {
+			fmt.Fprintf(w, "  x-axis %s\n", escapeQuadrantText(x[0]))
+		}
+	}
+	if y := q.YAxis(); y[0] != "" || y[1] != "" {
+		if y[1] != "" {
+			fmt.Fprintf(w, "  y-axis %s --> %s\n", escapeQuadrantText(y[0]), escapeQuadrantText(y[1]))
+		} else {
+			fmt.Fprintf(w, "  y-axis %s\n", escapeQuadrantText(y[0]))
+		}
+	}
+	for i, label := range q.Quadrants() {
+		if label != "" {
+			fmt.Fprintf(w, "  quadrant-%d %s\n", i+1, escapeQuadrantText(label))
+		}
+	}
+
+	for _, p := range q.Points() {
+		if math.IsNaN(p.X) || math.IsNaN(p.Y) || math.IsInf(p.X, 0) || math.IsInf(p.Y, 0) {
+			return fmt.Errorf("mmd: quadrant point %q has non-finite coordinates (%v, %v)", p.Name, p.X, p.Y)
+		}
+		if p.X < 0 || p.X > 1 || p.Y < 0 || p.Y > 1 {
+			return fmt.Errorf("mmd: quadrant point %q outside 0..1 range (%v, %v)", p.Name, p.X, p.Y)
+		}
+		// Point names are bare unless they contain ':' or '"', which break
+		// parsing; quoted names use #quot;-escaped quotes.
+		name := p.Name
+		if strings.ContainsAny(name, ":\"") {
+			name = `"` + strings.ReplaceAll(name, `"`, "#quot;") + `"`
+		}
+		fmt.Fprintf(w, "  %s: [%s, %s]\n", name,
+			strconv.FormatFloat(p.X, 'f', -1, 64),
+			strconv.FormatFloat(p.Y, 'f', -1, 64))
+	}
+	return nil
 }

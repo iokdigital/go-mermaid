@@ -35,6 +35,10 @@ func marshal(d diagram.Diagram) (any, error) {
 		return marshalER(v), nil
 	case *ast.ClassDiagram:
 		return marshalClass(v), nil
+	case *ast.PieDiagram:
+		return marshalPie(v), nil
+	case *ast.QuadrantDiagram:
+		return marshalQuadrant(v), nil
 	default:
 		return nil, fmt.Errorf("json: %w: %T", diagram.ErrInvalidFormat, d)
 	}
@@ -418,5 +422,66 @@ func marshalClass(c *ast.ClassDiagram) classJSON {
 		Classes:   classes,
 		Relations: rels,
 		Notes:     notes,
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pie
+// ────────────────────────────────────────────────────────────────────────────
+
+type pieJSON struct {
+	Type   string         `json:"type"`
+	Title  string         `json:"title,omitempty"`
+	Slices []pieSliceJSON `json:"slices,omitempty"`
+}
+
+type pieSliceJSON struct {
+	Label string  `json:"label"`
+	Value float64 `json:"value"`
+}
+
+func marshalPie(p *ast.PieDiagram) pieJSON {
+	slices := make([]pieSliceJSON, len(p.Slices()))
+	for i, s := range p.Slices() {
+		slices[i] = pieSliceJSON{Label: s.Label, Value: s.Value}
+	}
+	return pieJSON{
+		Type:   string(diagram.TypePie),
+		Title:  p.Title(),
+		Slices: slices,
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Quadrant
+// ────────────────────────────────────────────────────────────────────────────
+
+type quadrantJSON struct {
+	Type      string              `json:"type"`
+	Title     string              `json:"title,omitempty"`
+	XAxis     [2]string           `json:"xAxis"`
+	YAxis     [2]string           `json:"yAxis"`
+	Quadrants [4]string           `json:"quadrants"`
+	Points    []quadrantPointJSON `json:"points,omitempty"`
+}
+
+type quadrantPointJSON struct {
+	Name string  `json:"name"`
+	X    float64 `json:"x"`
+	Y    float64 `json:"y"`
+}
+
+func marshalQuadrant(q *ast.QuadrantDiagram) quadrantJSON {
+	points := make([]quadrantPointJSON, len(q.Points()))
+	for i, p := range q.Points() {
+		points[i] = quadrantPointJSON{Name: p.Name, X: p.X, Y: p.Y}
+	}
+	return quadrantJSON{
+		Type:      string(diagram.TypeQuadrant),
+		Title:     q.Title(),
+		XAxis:     q.XAxis(),
+		YAxis:     q.YAxis(),
+		Quadrants: q.Quadrants(),
+		Points:    points,
 	}
 }

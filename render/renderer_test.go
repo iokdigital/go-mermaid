@@ -150,11 +150,11 @@ func TestRendererPNGAllDiagramTypes(t *testing.T) {
 }
 
 func TestRendererPNGUnsupportedTypeFallback(t *testing.T) {
-	// Diagram types with no AST support (e.g. pie/quadrant/gantt/mindmap,
-	// which have no ast struct and no svg renderer) fall back via
-	// svg.Encode's FallbackFormatError.
+	// Diagram types with no AST support (e.g. gantt/mindmap, which have no
+	// ast struct and no svg renderer) fall back via svg.Encode's
+	// FallbackFormatError.
 	r := newRenderer()
-	_, err := r.RenderBytes(&fakePie{}, diagram.FormatPNG)
+	_, err := r.RenderBytes(&fakeGantt{}, diagram.FormatPNG)
 	if err == nil {
 		t.Fatal("expected error for unsupported PNG diagram type")
 	}
@@ -167,10 +167,10 @@ func TestRendererPNGUnsupportedTypeFallback(t *testing.T) {
 	}
 }
 
-type fakePie struct{}
+type fakeGantt struct{}
 
-func (s *fakePie) Type() diagram.DiagramType { return diagram.TypePie }
-func (s *fakePie) Title() string             { return "" }
+func (s *fakeGantt) Type() diagram.DiagramType { return diagram.TypeGantt }
+func (s *fakeGantt) Title() string             { return "" }
 
 func TestRendererHTMLProducesOutput(t *testing.T) {
 	f := ast.NewFlowchart("Phase 2", ast.DirectionLR)

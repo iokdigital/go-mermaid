@@ -3,8 +3,18 @@ package png
 import (
 	"bytes"
 	"encoding/xml"
+	"fmt"
+	"math"
 	"strconv"
 	"strings"
+	"sync"
+
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/gofont/gobold"
+	"golang.org/x/image/font/gofont/goitalic"
+	"golang.org/x/image/font/gofont/gomedium"
+	"golang.org/x/image/font/gofont/goregular"
+	"golang.org/x/image/font/opentype"
 )
 
 // textRun is one drawable string at an absolute SVG position.
@@ -156,4 +166,76 @@ func parseFloat(s string, def float64) float64 {
 		return def
 	}
 	return v
+}
+
+// Embedded Go typefaces, parsed once each. Bold+italic maps to Go Medium:
+// x/image ships no bold-italic Go face outside the monospace family, and
+// medium reads as emphasis without inventing a synthetic oblique.
+var (
+	parseRegular = sync.OnceValues(func() (*opentype.Font, error) {
+		return opentype.Parse(goregular.TTF)
+	})
+	parseBold = sync.OnceValues(func() (*opentype.Font, error) {
+		return opentype.Parse(gobold.TTF)
+	})
+	parseItalic = sync.OnceValues(func() (*opentype.Font, error) {
+		return opentype.Parse(goitalic.TTF)
+	})
+	parseMedium = sync.OnceValues(func() (*opentype.Font, error) {
+		return opentype.Parse(gomedium.TTF)
+	})
+)
+
+// faceKey identifies a cached rasterizer face. Sizes quantize to 1/64 px so
+// near-identical SVG font sizes share one face.
+type faceKey struct {
+	size64 int64
+	bold   bool
+	italic bool
+}
+
+var (
+	faceMu    sync.Mutex
+	faceCache = map[faceKey]font.Face{}
+)
+
+// typeface returns a screen-pixel face for size (SVG px) and style. Faces
+// are cached by quantized size and style; the error is descriptive (bad size
+// or corrupt embedded font data) and typeface never panics.
+func typeface(size float64, bold, italic bool) (font.Face, error) {
+	if math.IsNaN(size) || math.IsInf(size, 0) || size <= 0 {
+		return nil, fmt.Errorf("png: invalid font size %v", size)
+	}
+	key := faceKey{size64: int64(math.Round(size * 64)), bold: bold, italic: italic}
+
+	faceMu.Lock()
+	defer faceMu.Unlock()
+	if f, ok := faceCache[key]; ok {
+		return f, nil
+	}
+
+	parse, name := parseRegular, "goregular"
+	switch {
+	case bold && italic:
+		parse, name = parseMedium, "gomedium"
+	case bold:
+		parse, name = parseBold, "gobold"
+	case italic:
+		parse, name = parseItalic, "goitalic"
+	}
+	ttf, err := parse()
+	if err != nil {
+		return nil, fmt.Errorf("png: parse %s typeface: %w", name, err)
+	}
+	// SVG px are CSS px at 96dpi; opentype Size is in 72dpi points.
+	face, err := opentype.NewFace(ttf, &opentype.FaceOptions{
+		Size:    size * 72.0 / 96.0,
+		DPI:     96,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("png: new %s face at size %v: %w", name, size, err)
+	}
+	faceCache[key] = face
+	return face, nil
 }

@@ -15,3 +15,13 @@ func TestExtractTexts(t *testing.T) {
 		t.Errorf("entity not unescaped: %q", got[0].Text)
 	}
 }
+
+func TestLoadFace(t *testing.T) {
+	f, err := typeface(13, false, false)
+	if err != nil {
+		t.Fatalf("typeface: %v", err)
+	}
+	if f == nil {
+		t.Fatal("nil face")
+	}
+}

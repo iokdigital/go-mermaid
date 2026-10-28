@@ -28,7 +28,11 @@ import (
 func Encode(svgData []byte, w io.Writer, opts diagram.RenderOptions) error {
 	scale := resolveScale(opts)
 
-	icon, err := oksvg.ReadIconStream(bytes.NewReader(svgData), oksvg.WarnErrorMode)
+	// Text positions come from our own extraction pass; strip <text>
+	// subtrees from the copy fed to oksvg so it does not warn about the
+	// elements it cannot process.
+	runs := extractTexts(svgData)
+	icon, err := oksvg.ReadIconStream(bytes.NewReader(stripTexts(svgData)), oksvg.WarnErrorMode)
 	if err != nil {
 		return fmt.Errorf("parse svg for png: %w", err)
 	}
@@ -59,6 +63,18 @@ func Encode(svgData []byte, w io.Writer, opts diagram.RenderOptions) error {
 	rast := rasterx.NewDasher(width, height, scanner)
 	icon.SetTarget(0, 0, float64(width), float64(height))
 	icon.Draw(rast, 1.0)
+
+	// Overlay the extracted text runs. icon.SetTarget maps viewBox to
+	// pixels, so SVG coords scale by width/ViewBox.W — but only under
+	// uniform scaling. If the axes disagree by more than 1%, skip the text
+	// pass rather than misplacing glyphs.
+	if icon.ViewBox.W > 0 && icon.ViewBox.H > 0 {
+		sx := float64(width) / icon.ViewBox.W
+		sy := float64(height) / icon.ViewBox.H
+		if avg := (sx + sy) / 2; avg > 0 && math.Abs(sx-sy)/avg <= 0.01 {
+			drawTexts(img, runs, sx)
+		}
+	}
 
 	return stdpng.Encode(w, img)
 }

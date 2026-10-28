@@ -33,6 +33,8 @@ func Encode(w io.Writer, d diagram.Diagram) error {
 		return encodePie(w, v)
 	case *ast.QuadrantDiagram:
 		return encodeQuadrant(w, v)
+	case *ast.MindmapDiagram:
+		return encodeMindmap(w, v)
 	default:
 		return &diagram.FallbackFormatError{
 			Err:      fmt.Errorf("dot: %w: %T", diagram.ErrRendererNotAvailable, d),
@@ -825,6 +827,49 @@ func encodeQuadrant(w io.Writer, q *ast.QuadrantDiagram) error {
 				strconv.FormatFloat(p.X, 'f', -1, 64),
 				strconv.FormatFloat(p.Y, 'f', -1, 64)))
 	}
+
+	fmt.Fprintln(w, "}")
+	return nil
+}
+
+// encodeMindmap renders the tree as parent -> child edges with one node per
+// mindmap node. Hierarchy is preserved in edges; node labels carry the text.
+func encodeMindmap(w io.Writer, m *ast.MindmapDiagram) error {
+	fmt.Fprintln(w, "digraph {")
+	fmt.Fprintln(w, "  rankdir=LR;")
+	if title := m.Title(); title != "" {
+		fmt.Fprintf(w, "  label=%q;\n", title)
+		fmt.Fprintln(w, "  labelloc=t;")
+	}
+	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+
+	if m.Root() == nil {
+		fmt.Fprintln(w, "}")
+		return nil
+	}
+	n := 0
+	seen := make(map[*ast.MindNode]bool)
+	var emit func(node *ast.MindNode, parent string)
+	emit = func(node *ast.MindNode, parent string) {
+		if node == nil || seen[node] {
+			return
+		}
+		seen[node] = true
+		id := fmt.Sprintf("m%d", n)
+		n++
+		label := node.Label
+		if label == "" {
+			label = "(empty)"
+		}
+		fmt.Fprintf(w, "  %s [label=%q];\n", id, label)
+		if parent != "" {
+			fmt.Fprintf(w, "  %s -> %s;\n", parent, id)
+		}
+		for _, c := range node.Children {
+			emit(c, id)
+		}
+	}
+	emit(m.Root(), "")
 
 	fmt.Fprintln(w, "}")
 	return nil

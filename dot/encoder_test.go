@@ -955,3 +955,49 @@ func TestDOTQuadrantBasic(t *testing.T) {
 		t.Errorf("expected point label with coordinates:\n%s", got)
 	}
 }
+
+// ─── Mindmap ─────────────────────────────────────────────────────────────────
+
+func TestDOTMindmapBasic(t *testing.T) {
+	m := ast.NewMindmap("Topics")
+	root := ast.NewMindNode("root")
+	root.AddChild(ast.NewMindNode("Alpha"))
+	beta := ast.NewMindNode("Beta")
+	beta.AddChild(ast.NewMindNode("Beta one"))
+	root.AddChild(beta)
+	m.SetRoot(root)
+
+	got := encode(t, m)
+	if !strings.HasPrefix(got, "digraph {") {
+		t.Errorf("expected digraph open, got: %q", got[:min(50, len(got))])
+	}
+	if !strings.Contains(got, `label="Topics"`) {
+		t.Error("expected title label attribute")
+	}
+	for _, want := range []string{`label="root"`, `label="Alpha"`, `label="Beta"`, `label="Beta one"`, "m0 -> m1", "m0 -> m2", "m2 -> m3"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in DOT output:\n%s", want, got)
+		}
+	}
+}
+
+func TestDOTMindmapEmpty(t *testing.T) {
+	m := ast.NewMindmap("Nothing")
+	got := encode(t, m)
+	if !strings.HasPrefix(got, "digraph {") {
+		t.Errorf("expected digraph open, got: %q", got)
+	}
+}
+
+func TestDOTMindmapCycleTerminates(t *testing.T) {
+	m := ast.NewMindmap("")
+	a := ast.NewMindNode("A")
+	b := ast.NewMindNode("B")
+	a.AddChild(b)
+	b.AddChild(a) // misuse: must not hang the encoder
+	m.SetRoot(a)
+	got := encode(t, m)
+	if !strings.Contains(got, "digraph {") {
+		t.Errorf("expected digraph output, got: %q", got)
+	}
+}

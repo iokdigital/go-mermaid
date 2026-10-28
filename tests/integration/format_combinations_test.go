@@ -230,6 +230,33 @@ func TestMindmapAllFormats(t *testing.T) {
 	}
 }
 
+func TestGanttAllFormats(t *testing.T) {
+	r := render.NewRenderer(diagram.NewRenderOptions())
+	g := ast.NewGantt("Test")
+	g.SetDateFormat("YYYY-MM-DD")
+	s := ast.NewGanttSection("Build")
+	s.AddTask(ast.GanttTask{Name: "A", ID: "a", Start: "2014-01-01", End: "5d"})
+	s.AddTask(ast.GanttTask{Name: "B", Start: "after a", End: "3d"})
+	g.AddSection(*s)
+
+	formats := []diagram.OutputFormat{
+		diagram.FormatMMD, diagram.FormatSVG, diagram.FormatHTML,
+		diagram.FormatPNG, diagram.FormatPDF, diagram.FormatJSON,
+		diagram.FormatDOT, diagram.FormatMarkdown,
+	}
+
+	for _, fmt := range formats {
+		data, err := r.RenderBytes(g, fmt)
+		if err != nil {
+			t.Errorf("Gantt + %v: %v", fmt, err)
+			continue
+		}
+		if len(data) == 0 {
+			t.Errorf("Gantt + %v: empty output", fmt)
+		}
+	}
+}
+
 func TestSVGContainsNamespace(t *testing.T) {
 	r := render.NewRenderer(diagram.NewRenderOptions())
 	f := ast.NewFlowchart("", ast.DirectionTB)

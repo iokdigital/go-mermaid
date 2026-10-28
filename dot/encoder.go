@@ -35,6 +35,8 @@ func Encode(w io.Writer, d diagram.Diagram) error {
 		return encodeQuadrant(w, v)
 	case *ast.MindmapDiagram:
 		return encodeMindmap(w, v)
+	case *ast.GanttDiagram:
+		return encodeGantt(w, v)
 	default:
 		return &diagram.FallbackFormatError{
 			Err:      fmt.Errorf("dot: %w: %T", diagram.ErrRendererNotAvailable, d),
@@ -870,6 +872,36 @@ func encodeMindmap(w io.Writer, m *ast.MindmapDiagram) error {
 		}
 	}
 	emit(m.Root(), "")
+
+	fmt.Fprintln(w, "}")
+	return nil
+}
+
+// encodeGantt renders tasks as labelled box nodes in dependency order with
+// date ranges. Calendar geometry has no DOT equivalent; the schedule data
+// is preserved in node labels.
+func encodeGantt(w io.Writer, g *ast.GanttDiagram) error {
+	tasks, err := g.Resolve()
+	if err != nil {
+		return fmt.Errorf("dot: %w", err)
+	}
+	fmt.Fprintln(w, "digraph {")
+	fmt.Fprintln(w, "  rankdir=LR;")
+	if title := g.Title(); title != "" {
+		fmt.Fprintf(w, "  label=%q;\n", title)
+		fmt.Fprintln(w, "  labelloc=t;")
+	}
+	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+
+	for i, t := range tasks {
+		label := t.Name
+		if label == "" {
+			label = fmt.Sprintf("task %d", i+1)
+		}
+		fmt.Fprintf(w, "  task_%d [label=%q];\n", i,
+			fmt.Sprintf("%s (%s – %s)", label,
+				t.Start.Format("2006-01-02"), t.End.Format("2006-01-02")))
+	}
 
 	fmt.Fprintln(w, "}")
 	return nil

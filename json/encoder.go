@@ -41,6 +41,8 @@ func marshal(d diagram.Diagram) (any, error) {
 		return marshalQuadrant(v), nil
 	case *ast.MindmapDiagram:
 		return marshalMindmap(v), nil
+	case *ast.GanttDiagram:
+		return marshalGantt(v), nil
 	default:
 		return nil, fmt.Errorf("json: %w: %T", diagram.ErrInvalidFormat, d)
 	}
@@ -537,4 +539,61 @@ func marshalMindNode(n *ast.MindNode) *mindNodeJSON {
 	}
 	walk(n, out)
 	return out
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Gantt
+// ────────────────────────────────────────────────────────────────────────────
+
+type ganttJSON struct {
+	Type       string             `json:"type"`
+	Title      string             `json:"title,omitempty"`
+	DateFormat string             `json:"dateFormat,omitempty"`
+	AxisFormat string             `json:"axisFormat,omitempty"`
+	Sections   []ganttSectionJSON `json:"sections,omitempty"`
+	Tasks      []ganttTaskJSON    `json:"tasks,omitempty"`
+}
+
+type ganttSectionJSON struct {
+	Name  string          `json:"name"`
+	Tasks []ganttTaskJSON `json:"tasks,omitempty"`
+}
+
+type ganttTaskJSON struct {
+	Name  string   `json:"name"`
+	ID    string   `json:"id,omitempty"`
+	Tags  []string `json:"tags,omitempty"`
+	Start string   `json:"start"`
+	End   string   `json:"end"`
+}
+
+func marshalGanttTask(t ast.GanttTask) ganttTaskJSON {
+	tags := make([]string, len(t.Tags))
+	for i, tag := range t.Tags {
+		tags[i] = string(tag)
+	}
+	return ganttTaskJSON{Name: t.Name, ID: t.ID, Tags: tags, Start: t.Start, End: t.End}
+}
+
+func marshalGantt(g *ast.GanttDiagram) ganttJSON {
+	tasks := make([]ganttTaskJSON, len(g.Tasks()))
+	for i, t := range g.Tasks() {
+		tasks[i] = marshalGanttTask(t)
+	}
+	sections := make([]ganttSectionJSON, len(g.Sections()))
+	for i, s := range g.Sections() {
+		st := make([]ganttTaskJSON, len(s.Tasks))
+		for j, t := range s.Tasks {
+			st[j] = marshalGanttTask(t)
+		}
+		sections[i] = ganttSectionJSON{Name: s.Name, Tasks: st}
+	}
+	return ganttJSON{
+		Type:       string(diagram.TypeGantt),
+		Title:      g.Title(),
+		DateFormat: g.DateFormat(),
+		AxisFormat: g.AxisFormat(),
+		Sections:   sections,
+		Tasks:      tasks,
+	}
 }

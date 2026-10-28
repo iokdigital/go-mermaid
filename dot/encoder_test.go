@@ -989,6 +989,33 @@ func TestDOTMindmapEmpty(t *testing.T) {
 	}
 }
 
+// ─── Gantt ───────────────────────────────────────────────────────────────────
+
+func TestDOTGanttBasic(t *testing.T) {
+	g := ast.NewGantt("Plan")
+	g.AddTask(ast.GanttTask{Name: "A", ID: "a", Start: "2014-01-01", End: "5d"})
+	g.AddTask(ast.GanttTask{Name: "B", Start: "after a", End: "3d"})
+
+	got := encode(t, g)
+	if !strings.HasPrefix(got, "digraph {") {
+		t.Errorf("expected digraph open, got: %q", got[:min(50, len(got))])
+	}
+	for _, want := range []string{`label="Plan"`, "A (2014-01-01", "B (2014-01-06"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in DOT output:\n%s", want, got)
+		}
+	}
+}
+
+func TestDOTGanttUnresolvableErrors(t *testing.T) {
+	g := ast.NewGantt("")
+	g.AddTask(ast.GanttTask{Name: "Bad", Start: "after missing", End: "5d"})
+	var buf bytes.Buffer
+	if err := dot.Encode(&buf, g); err == nil {
+		t.Error("expected error for unresolvable gantt")
+	}
+}
+
 func TestDOTMindmapCycleTerminates(t *testing.T) {
 	m := ast.NewMindmap("")
 	a := ast.NewMindNode("A")

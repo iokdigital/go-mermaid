@@ -224,6 +224,7 @@ func TestHTMLAllDiagramTypes(t *testing.T) {
 		{"pie", ast.NewPie("Pie"), "pie"},
 		{"quadrant", ast.NewQuadrant("Quad"), "quadrantChart"},
 		{"mindmap", ast.NewMindmap("Mind"), "mindmap"},
+		{"gantt", ast.NewGantt("Gantt"), "gantt"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

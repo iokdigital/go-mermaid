@@ -65,6 +65,7 @@ func TestJSONAllDiagramTypes(t *testing.T) {
 		{"pie", ast.NewPie("Pie"), "pie"},
 		{"quadrant", ast.NewQuadrant("Quad"), "quadrant"},
 		{"mindmap", ast.NewMindmap("Mind"), "mindmap"},
+		{"gantt", ast.NewGantt("Gantt"), "gantt"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -213,5 +214,46 @@ func TestJSONMindmapCycleTerminates(t *testing.T) {
 	raw := encode(t, m)
 	if !stdjson.Valid(raw) {
 		t.Errorf("invalid JSON: %s", raw)
+	}
+}
+
+func TestJSONGanttFields(t *testing.T) {
+	g := ast.NewGantt("Plan")
+	g.SetDateFormat("YYYY-MM-DD")
+	g.SetAxisFormat("%m/%d")
+	s := ast.NewGanttSection("Build")
+	s.AddTask(ast.GanttTask{Name: "A", ID: "a", Tags: []ast.GanttTag{ast.TagCrit}, Start: "2014-01-01", End: "5d"})
+	g.AddSection(*s)
+	g.AddTask(ast.GanttTask{Name: "Solo", Start: "2014-02-01", End: "2d"})
+
+	var v map[string]any
+	if err := stdjson.Unmarshal(encode(t, g), &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if v["type"] != "gantt" {
+		t.Errorf("expected type=gantt, got: %v", v["type"])
+	}
+	if v["dateFormat"] != "YYYY-MM-DD" || v["axisFormat"] != "%m/%d" {
+		t.Errorf("expected formats, got: %v", v)
+	}
+	sections, ok := v["sections"].([]any)
+	if !ok || len(sections) != 1 {
+		t.Fatalf("expected 1 section, got: %v", v["sections"])
+	}
+	tasks, ok := sections[0].(map[string]any)["tasks"].([]any)
+	if !ok || len(tasks) != 1 {
+		t.Fatalf("expected 1 section task, got: %v", sections[0])
+	}
+	t0 := tasks[0].(map[string]any)
+	if t0["name"] != "A" || t0["id"] != "a" || t0["start"] != "2014-01-01" || t0["end"] != "5d" {
+		t.Errorf("unexpected task: %v", t0)
+	}
+	tags, ok := t0["tags"].([]any)
+	if !ok || len(tags) != 1 || tags[0] != "crit" {
+		t.Errorf("expected [crit] tags, got: %v", t0["tags"])
+	}
+	ungrouped, ok := v["tasks"].([]any)
+	if !ok || len(ungrouped) != 1 {
+		t.Errorf("expected 1 ungrouped task, got: %v", v["tasks"])
 	}
 }

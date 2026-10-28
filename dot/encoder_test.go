@@ -61,13 +61,13 @@ func TestDOTConfidenceFill(t *testing.T) {
 	}
 }
 
-func TestDOTNonFlowchartReturnsError(t *testing.T) {
-	// Flowchart, sequence, state, and ER diagrams are supported; class diagrams are not.
-	c := ast.NewClass("unsupported")
+func TestDOTUnsupportedTypeReturnsError(t *testing.T) {
+	// Flowchart, sequence, state, ER, and class diagrams are supported; other
+	// types (e.g. pie) are not.
 	var buf bytes.Buffer
-	err := dot.Encode(&buf, c)
+	err := dot.Encode(&buf, &fakePieDiagram{})
 	if err == nil {
-		t.Fatal("expected error for non-flowchart/non-sequence/non-state/non-ER type")
+		t.Fatal("expected error for unsupported diagram type")
 	}
 	var ferr *diagram.FallbackFormatError
 	if !errors.As(err, &ferr) {
@@ -80,6 +80,13 @@ func TestDOTNonFlowchartReturnsError(t *testing.T) {
 		t.Error("expected ErrRendererNotAvailable in error chain")
 	}
 }
+
+// fakePieDiagram stands in for a genuinely unsupported diagram type (Phase 2
+// types have no AST structs in this repo).
+type fakePieDiagram struct{}
+
+func (f *fakePieDiagram) Type() diagram.DiagramType { return diagram.TypePie }
+func (f *fakePieDiagram) Title() string             { return "" }
 
 func min(a, b int) int {
 	if a < b {
@@ -603,6 +610,247 @@ func TestDOTERRoundtrip(t *testing.T) {
 	// The render call-site must accept ER diagrams for DOT output.
 	r := render.NewRenderer(diagram.NewRenderOptions())
 	data, err := r.RenderBytes(e, diagram.FormatDOT)
+	if err != nil {
+		t.Fatalf("RenderBytes DOT: %v", err)
+	}
+	if len(data) == 0 || !strings.Contains(string(data), "digraph") {
+		t.Errorf("renderer DOT output invalid:\n%s", string(data))
+	}
+}
+
+// ─── Class ───────────────────────────────────────────────────────────────────
+
+func TestDOTClassBasic(t *testing.T) {
+	c := ast.NewClass("Zoo Model")
+	c.AddClass(ast.DiagramClass{
+		Name: "Animal",
+		Members: []ast.ClassMember{
+			{Visibility: ast.VisPublic, Type: "string", Name: "name"},
+			{Visibility: ast.VisPrivate, Type: "int", Name: "age"},
+			{Visibility: ast.VisPublic, Type: "void", Name: "speak", IsMethod: true},
+			{Visibility: ast.VisPublic, Type: "void", Name: "run", IsMethod: true, IsStatic: true},
+		},
+	})
+	c.AddClass(ast.DiagramClass{Name: "Zoo"})
+
+	got := encode(t, c)
+	if !strings.HasPrefix(got, "digraph {") {
+		t.Errorf("expected digraph open, got: %q", got[:min(50, len(got))])
+	}
+	if !strings.Contains(got, "rankdir=TB") {
+		t.Error("expected rankdir=TB")
+	}
+	if !strings.Contains(got, `label="Zoo Model"`) {
+		t.Error("expected title label attribute")
+	}
+	for _, want := range []string{
+		"shape=record", "Animal", "{Zoo}",
+		"+string name", "-int age",
+		"+void speak()", "+void run()$",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output:\n%s", want, got)
+		}
+	}
+	// Attributes and methods live in separate record compartments.
+	animalLine := ""
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "Animal [label=") {
+			animalLine = line
+		}
+	}
+	if animalLine == "" {
+		t.Fatalf("expected Animal record node:\n%s", got)
+	}
+	attrIdx := strings.Index(animalLine, "+string name")
+	methIdx := strings.Index(animalLine, "+void speak()")
+	sepIdx := strings.Index(animalLine, "|+void speak()")
+	if attrIdx < 0 || methIdx < 0 || attrIdx > methIdx {
+		t.Errorf("expected attributes before methods in record node:\n%s", animalLine)
+	}
+	if sepIdx < 0 {
+		t.Errorf("expected compartment separator before methods:\n%s", animalLine)
+	}
+}
+
+func TestDOTClassInheritance(t *testing.T) {
+	c := ast.NewClass("")
+	c.AddClass(ast.DiagramClass{
+		Name:       "Animal",
+		Annotation: "<<abstract>>",
+		Members: []ast.ClassMember{
+			{Visibility: ast.VisPublic, Type: "void", Name: "speak", IsMethod: true, IsAbstract: true},
+		},
+	})
+	c.AddClass(ast.DiagramClass{Name: "Dog"})
+	c.AddClass(ast.DiagramClass{Name: "Flyable", Annotation: "<<interface>>"})
+	c.AddClass(ast.DiagramClass{Name: "Bird"})
+	c.AddRelation(ast.ClassRelation{From: "Animal", To: "Dog", Kind: ast.RelInheritance, Label: "extends"})
+	c.AddRelation(ast.ClassRelation{From: "Flyable", To: "Bird", Kind: ast.RelRealization, Label: "implements"})
+
+	got := encode(t, c)
+	for _, want := range []string{
+		`\<\<abstract\>\>`, `\<\<interface\>\>`,
+		"+void speak()*",
+		"Animal -> Dog", "Flyable -> Bird",
+		`label="extends"`, `label="implements"`,
+		"arrowhead=empty",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output:\n%s", want, got)
+		}
+	}
+	// Inheritance renders solid; only realization is dashed.
+	for _, line := range strings.Split(got, "\n") {
+		switch {
+		case strings.Contains(line, "Animal -> Dog"):
+			if strings.Contains(line, "style=dashed") {
+				t.Errorf("inheritance must not be dashed:\n%s", line)
+			}
+		case strings.Contains(line, "Flyable -> Bird"):
+			if !strings.Contains(line, "style=dashed") {
+				t.Errorf("realization must be dashed:\n%s", line)
+			}
+		}
+	}
+}
+
+func TestDOTClassAssociations(t *testing.T) {
+	c := ast.NewClass("")
+	c.AddClass(ast.DiagramClass{Name: "Car"})
+	c.AddClass(ast.DiagramClass{Name: "Engine"})
+	c.AddClass(ast.DiagramClass{Name: "Team"})
+	c.AddClass(ast.DiagramClass{Name: "Player"})
+	c.AddRelation(ast.ClassRelation{From: "Car", To: "Engine", Kind: ast.RelComposition, Label: "has"})
+	c.AddRelation(ast.ClassRelation{From: "Team", To: "Player", Kind: ast.RelAggregation, Label: "has"})
+	c.AddRelation(ast.ClassRelation{
+		From: "Player", To: "Team",
+		Kind: ast.RelAssociation, Label: "plays for",
+		CardFrom: "*", CardTo: "1",
+	})
+	c.AddRelation(ast.ClassRelation{From: "Car", To: "Team", Kind: ast.RelDependency, Label: "uses"})
+	c.AddRelation(ast.ClassRelation{From: "Engine", To: "Player", Kind: ast.RelLink})
+	// Relation-only class: emitted so every edge endpoint exists.
+	c.AddRelation(ast.ClassRelation{From: "Player", To: "Ghost", Kind: ast.RelAssociation})
+
+	got := encode(t, c)
+	for _, want := range []string{
+		"Car -> Engine", "arrowtail=diamond", "dir=both",
+		"Team -> Player", "arrowtail=odiamond",
+		"Player -> Team", `label="plays for"`, `taillabel="*"`, `headlabel="1"`,
+		"Car -> Team", "Engine -> Player",
+		`"Ghost" shape=box`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output:\n%s", want, got)
+		}
+	}
+	for _, line := range strings.Split(got, "\n") {
+		switch {
+		case strings.Contains(line, "Car -> Engine") || strings.Contains(line, "Team -> Player"):
+			if !strings.Contains(line, "arrowhead=none") {
+				t.Errorf("composition/aggregation must suppress the head arrow:\n%s", line)
+			}
+		case strings.Contains(line, "Car -> Team") && strings.Contains(line, "->"):
+			if !strings.Contains(line, "style=dashed") {
+				t.Errorf("dependency must be dashed:\n%s", line)
+			}
+		case strings.Contains(line, "Engine -> Player"):
+			if !strings.Contains(line, "arrowhead=none") {
+				t.Errorf("plain link must have no arrowhead:\n%s", line)
+			}
+		case strings.Contains(line, "Player -> Team"):
+			if strings.Contains(line, "arrowhead=none") {
+				t.Errorf("association must keep the default arrow:\n%s", line)
+			}
+		}
+	}
+}
+
+func TestDOTClassRecordEscaping(t *testing.T) {
+	c := ast.NewClass("")
+	c.AddClass(ast.DiagramClass{
+		Name: "we|ird",
+		Members: []ast.ClassMember{
+			{Visibility: ast.VisPublic, Type: "str{ing}", Name: "a<b>c"},
+			{Visibility: ast.VisPublic, Type: "void", Name: "m|e", IsMethod: true},
+		},
+	})
+
+	got := encode(t, c)
+	for _, want := range []string{`we\|ird`, `str\{ing\}`, `a\<b\>c`, `m\|e()`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected escaped %q in output:\n%s", want, got)
+		}
+	}
+}
+
+// TestDOTClassRoundtrip encodes the same class AST to both DOT and MMD
+// and checks the two outputs carry the same semantic content (classes,
+// members, relations, cardinalities, notes). There is no MMD parser in this
+// repo, so the roundtrip is a dual-encoding consistency check rather than a
+// decode comparison.
+func TestDOTClassRoundtrip(t *testing.T) {
+	c := ast.NewClass("Zoo Model")
+	c.AddClass(ast.DiagramClass{
+		Name:       "Animal",
+		Annotation: "<<abstract>>",
+		Members: []ast.ClassMember{
+			{Visibility: ast.VisPublic, Type: "string", Name: "name"},
+			{Visibility: ast.VisPublic, Type: "void", Name: "speak", IsMethod: true, IsAbstract: true},
+		},
+	})
+	c.AddClass(ast.DiagramClass{
+		Name: "Dog",
+		Members: []ast.ClassMember{
+			{Visibility: ast.VisPublic, Type: "void", Name: "fetch", IsMethod: true},
+		},
+	})
+	c.AddRelation(ast.ClassRelation{From: "Animal", To: "Dog", Kind: ast.RelInheritance, Label: "extends"})
+	c.AddRelation(ast.ClassRelation{
+		From: "Dog", To: "Animal",
+		Kind: ast.RelAssociation, Label: "pack",
+		CardFrom: "1", CardTo: "*",
+	})
+	c.AddNote(ast.ClassNote{Class: "Dog", Text: "good boy"})
+
+	var dotBuf bytes.Buffer
+	if err := dot.Encode(&dotBuf, c); err != nil {
+		t.Fatalf("dot.Encode: %v", err)
+	}
+	var mmdBuf bytes.Buffer
+	if err := mmd.Encode(&mmdBuf, c); err != nil {
+		t.Fatalf("mmd.Encode: %v", err)
+	}
+	dotOut, mmdOut := dotBuf.String(), mmdBuf.String()
+
+	if !strings.Contains(mmdOut, "classDiagram") {
+		t.Errorf("mmd output missing classDiagram header:\n%s", mmdOut)
+	}
+
+	// Every semantic token must appear in both encodings.
+	for _, token := range []string{
+		"Animal", "Dog", "+string name", "+void speak()*",
+		"+void fetch()", "extends", "pack", "good boy", "Zoo Model",
+	} {
+		if !strings.Contains(dotOut, token) {
+			t.Errorf("dot output missing %q:\n%s", token, dotOut)
+		}
+		if !strings.Contains(mmdOut, token) {
+			t.Errorf("mmd output missing %q:\n%s", token, mmdOut)
+		}
+	}
+	// Inheritance uses the hollow-triangle arrowhead; cardinalities are
+	// preserved verbatim in taillabel/headlabel.
+	for _, token := range []string{"arrowhead=empty", `taillabel="1"`, `headlabel="*"`, "shape=note"} {
+		if !strings.Contains(dotOut, token) {
+			t.Errorf("dot output missing %q:\n%s", token, dotOut)
+		}
+	}
+
+	// The render call-site must accept class diagrams for DOT output.
+	r := render.NewRenderer(diagram.NewRenderOptions())
+	data, err := r.RenderBytes(c, diagram.FormatDOT)
 	if err != nil {
 		t.Fatalf("RenderBytes DOT: %v", err)
 	}

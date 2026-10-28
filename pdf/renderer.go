@@ -1,5 +1,5 @@
 // Package pdf produces PDF output by rasterizing SVG to PNG then embedding
-// the image in an A4 landscape page using jung-kurt/gofpdf.
+// the image in an A4 landscape page using go-pdf/fpdf.
 //
 // Pipeline: SVG → PNG (via png.Encode at print resolution) → PDF.
 // Limitation: output is raster-embedded, not vector. The image will pixelate
@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"io"
 
-	gofpdf "github.com/jung-kurt/gofpdf"
+	gofpdf "github.com/go-pdf/fpdf"
 
 	diagram "github.com/iokdigital/go-mermaid"
 	diapng "github.com/iokdigital/go-mermaid/png"

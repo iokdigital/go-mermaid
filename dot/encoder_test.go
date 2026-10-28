@@ -62,12 +62,12 @@ func TestDOTConfidenceFill(t *testing.T) {
 }
 
 func TestDOTNonFlowchartReturnsError(t *testing.T) {
-	// Sequence diagrams are supported; state diagrams are not.
-	s := ast.NewState("unsupported")
+	// Flowchart, sequence, and state diagrams are supported; ER diagrams are not.
+	e := ast.NewER("unsupported")
 	var buf bytes.Buffer
-	err := dot.Encode(&buf, s)
+	err := dot.Encode(&buf, e)
 	if err == nil {
-		t.Fatal("expected error for non-flowchart/non-sequence type")
+		t.Fatal("expected error for non-flowchart/non-sequence/non-state type")
 	}
 	var ferr *diagram.FallbackFormatError
 	if !errors.As(err, &ferr) {
@@ -272,6 +272,166 @@ func TestDOTSequenceRoundtrip(t *testing.T) {
 	}
 
 	// The render call-site must accept sequence diagrams for DOT output.
+	r := render.NewRenderer(diagram.NewRenderOptions())
+	data, err := r.RenderBytes(s, diagram.FormatDOT)
+	if err != nil {
+		t.Fatalf("RenderBytes DOT: %v", err)
+	}
+	if len(data) == 0 || !strings.Contains(string(data), "digraph") {
+		t.Errorf("renderer DOT output invalid:\n%s", string(data))
+	}
+}
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+func TestDOTStateBasic(t *testing.T) {
+	s := ast.NewState("Job Lifecycle")
+	s.AddState(ast.DiagramState{ID: "Pending", Label: "Pending", Kind: ast.StateNormal})
+	s.AddState(ast.DiagramState{ID: "Running", Label: "Running", Kind: ast.StateNormal})
+	s.AddTransition(ast.StateTransition{From: "Pending", To: "Running", Event: "start"})
+	s.AddTransition(ast.StateTransition{From: "Running", To: "Pending", Event: "retry"})
+
+	got := encode(t, s)
+	if !strings.HasPrefix(got, "digraph {") {
+		t.Errorf("expected digraph open, got: %q", got[:min(50, len(got))])
+	}
+	if !strings.Contains(got, "rankdir=TB") {
+		t.Error("expected rankdir=TB")
+	}
+	if !strings.Contains(got, `label="Job Lifecycle"`) {
+		t.Error("expected title label attribute")
+	}
+	if !strings.Contains(got, `label="Pending"`) {
+		t.Error("expected Pending state node")
+	}
+	if !strings.Contains(got, "Pending -> Running") {
+		t.Error("expected transition edge Pending -> Running")
+	}
+	if !strings.Contains(got, `label="start"`) {
+		t.Error("expected transition event label")
+	}
+}
+
+func TestDOTStateKinds(t *testing.T) {
+	s := ast.NewState("")
+	s.AddState(ast.DiagramState{ID: "s0", Kind: ast.StateStart})
+	s.AddState(ast.DiagramState{ID: "e0", Kind: ast.StateEnd})
+	s.AddState(ast.DiagramState{ID: "f0", Kind: ast.StateFork})
+	s.AddState(ast.DiagramState{ID: "j0", Kind: ast.StateJoin})
+	s.AddState(ast.DiagramState{ID: "c0", Label: "Decide", Kind: ast.StateChoice})
+
+	got := encode(t, s)
+	for _, want := range []string{
+		"s0", "shape=circle style=filled",
+		"e0", "shape=doublecircle",
+		"f0", "fillcolor=black",
+		"j0", "fillcolor=black",
+		"c0", "shape=diamond",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output:\n%s", want, got)
+		}
+	}
+}
+
+func TestDOTStatePseudoStartEnd(t *testing.T) {
+	s := ast.NewState("")
+	s.AddTransition(ast.StateTransition{From: "[*]", To: "Pending"})
+	s.AddTransition(ast.StateTransition{From: "Pending", To: "Running", Event: "start"})
+	s.AddTransition(ast.StateTransition{From: "Running", To: "[*]"})
+
+	got := encode(t, s)
+	for _, want := range []string{
+		`__start [label="" shape=circle style=filled`,
+		`__end [label="" shape=doublecircle`,
+		"__start -> Pending",
+		"Running -> __end",
+		// Transition-only states are emitted so every endpoint exists.
+		`"Pending" shape=box`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "[*]") {
+		t.Errorf("raw [*] must not leak into DOT output:\n%s", got)
+	}
+}
+
+func TestDOTStateCompositeAndNote(t *testing.T) {
+	s := ast.NewState("")
+	s.AddState(ast.DiagramState{
+		ID:    "Active",
+		Label: "Active",
+		Kind:  ast.StateNormal,
+		Children: []ast.DiagramState{
+			{ID: "S1", Label: "Sub1", Kind: ast.StateNormal},
+			{ID: "S2", Label: "Sub2", Kind: ast.StateNormal},
+		},
+	})
+	s.AddTransition(ast.StateTransition{From: "S1", To: "S2", Event: "next"})
+	s.AddNote(ast.StateNote{State: "S1", Text: "important"})
+
+	got := encode(t, s)
+	for _, want := range []string{
+		"cluster_Active", `"Active"`,
+		"S1", "S2", `label="next"`,
+		"shape=note", "important", "style=dotted",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in output:\n%s", want, got)
+		}
+	}
+}
+
+// TestDOTStateRoundtrip encodes the same state AST to both DOT and MMD
+// and checks the two outputs carry the same semantic content (states,
+// transitions, notes). There is no MMD parser in this repo, so the roundtrip
+// is a dual-encoding consistency check rather than a decode comparison.
+func TestDOTStateRoundtrip(t *testing.T) {
+	s := ast.NewState("Checkout")
+	s.AddState(ast.DiagramState{ID: "Pending", Label: "Pending", Kind: ast.StateNormal})
+	s.AddState(ast.DiagramState{
+		ID:    "Active",
+		Label: "Active",
+		Kind:  ast.StateNormal,
+		Children: []ast.DiagramState{
+			{ID: "Running", Label: "Running", Kind: ast.StateNormal},
+		},
+	})
+	s.AddTransition(ast.StateTransition{From: "[*]", To: "Pending"})
+	s.AddTransition(ast.StateTransition{From: "Pending", To: "Running", Event: "start"})
+	s.AddTransition(ast.StateTransition{From: "Running", To: "[*]"})
+	s.AddNote(ast.StateNote{State: "Pending", Text: "waits for payment"})
+
+	var dotBuf bytes.Buffer
+	if err := dot.Encode(&dotBuf, s); err != nil {
+		t.Fatalf("dot.Encode: %v", err)
+	}
+	var mmdBuf bytes.Buffer
+	if err := mmd.Encode(&mmdBuf, s); err != nil {
+		t.Fatalf("mmd.Encode: %v", err)
+	}
+	dotOut, mmdOut := dotBuf.String(), mmdBuf.String()
+
+	if !strings.Contains(mmdOut, "stateDiagram-v2") {
+		t.Errorf("mmd output missing stateDiagram-v2 header:\n%s", mmdOut)
+	}
+
+	// Every semantic token must appear in both encodings.
+	for _, token := range []string{
+		"Pending", "Running", "Active", "start",
+		"waits for payment", "Checkout",
+	} {
+		if !strings.Contains(dotOut, token) {
+			t.Errorf("dot output missing %q:\n%s", token, dotOut)
+		}
+		if !strings.Contains(mmdOut, token) {
+			t.Errorf("mmd output missing %q:\n%s", token, mmdOut)
+		}
+	}
+
+	// The render call-site must accept state diagrams for DOT output.
 	r := render.NewRenderer(diagram.NewRenderOptions())
 	data, err := r.RenderBytes(s, diagram.FormatDOT)
 	if err != nil {

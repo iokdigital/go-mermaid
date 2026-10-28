@@ -1,4 +1,4 @@
-// Package dot encodes flowchart and sequence diagram ASTs to Graphviz DOT format.
+// Package dot encodes flowchart, sequence, and state diagram ASTs to Graphviz DOT format.
 // Other diagram types return ErrRendererNotAvailable.
 package dot
 
@@ -12,7 +12,7 @@ import (
 )
 
 // Encode writes a Graphviz DOT representation of d to w.
-// Flowchart and sequence diagrams are supported; other types return a
+// Flowchart, sequence, and state diagrams are supported; other types return a
 // FallbackFormatError wrapping ErrRendererNotAvailable.
 func Encode(w io.Writer, d diagram.Diagram) error {
 	switch v := d.(type) {
@@ -20,6 +20,8 @@ func Encode(w io.Writer, d diagram.Diagram) error {
 		return encodeFlowchart(w, v)
 	case *ast.SequenceDiagram:
 		return encodeSequence(w, v)
+	case *ast.StateDiagram:
+		return encodeState(w, v)
 	default:
 		return &diagram.FallbackFormatError{
 			Err:      fmt.Errorf("dot: %w: %T", diagram.ErrRendererNotAvailable, d),
@@ -337,4 +339,167 @@ func writeSeqEdge(w io.Writer, from, to, label string, style ast.MessageStyle, a
 		attrStr = " [" + strings.Join(attrs, " ") + "]"
 	}
 	fmt.Fprintf(w, "%s%s -> %s%s;\n", indent, sanitizeDOTID(from), sanitizeDOTID(to), attrStr)
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// State
+// ────────────────────────────────────────────────────────────────────────────
+
+// encodeState writes a Graphviz DOT representation of a state diagram.
+//
+// Mapping notes:
+//   - normal states become box nodes; choice states become diamonds;
+//   - fork/join states become filled black bars (fixed-size box nodes);
+//   - start states become filled black circles, end states double circles;
+//   - the Mermaid [*] pseudo-state maps to synthetic __start/__end nodes
+//     (position-dependent: [*] as a source is __start, as a target __end);
+//   - composite (nested) states become cluster subgraphs;
+//   - transitions become labelled edges (Event as the label);
+//   - states referenced only by transitions (never declared via AddState)
+//     are emitted as default box nodes so the graph is complete;
+//   - notes become shape=note nodes linked to their state with dotted edges.
+func encodeState(w io.Writer, s *ast.StateDiagram) error {
+	fmt.Fprintln(w, "digraph {")
+	fmt.Fprintln(w, "  rankdir=TB;")
+	if title := s.Title(); title != "" {
+		fmt.Fprintf(w, "  label=%q;\n", title)
+		fmt.Fprintln(w, "  labelloc=t;")
+	}
+	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+
+	declared := make(map[string]bool)
+	for _, st := range s.States() {
+		markStateIDs(st, declared)
+	}
+
+	needStart, needEnd := false, false
+	for _, t := range s.Transitions() {
+		if stateEndpointID(t.From, true) == "__start" {
+			needStart = true
+		}
+		if stateEndpointID(t.To, false) == "__end" {
+			needEnd = true
+		}
+		// A bare "start"/"end" ID on the opposite side still maps to its
+		// synthetic node; cover it via the endpoint mapping itself.
+		if stateEndpointID(t.To, false) == "__start" {
+			needStart = true
+		}
+		if stateEndpointID(t.From, true) == "__end" {
+			needEnd = true
+		}
+	}
+	if needStart {
+		fmt.Fprintln(w, `  __start [label="" shape=circle style=filled fillcolor=black width=0.3 fixedsize=true];`)
+	}
+	if needEnd {
+		fmt.Fprintln(w, `  __end [label="" shape=doublecircle width=0.35 fixedsize=true];`)
+	}
+
+	for _, st := range s.States() {
+		writeStateNode(w, st, "  ")
+	}
+
+	// Emit transition-only states so every edge endpoint exists as a node.
+	seen := make(map[string]bool)
+	for _, t := range s.Transitions() {
+		for _, end := range []struct {
+			id     string
+			source bool
+		}{{t.From, true}, {t.To, false}} {
+			mapped := stateEndpointID(end.id, end.source)
+			if mapped == "__start" || mapped == "__end" {
+				continue
+			}
+			if declared[mapped] || seen[mapped] {
+				continue
+			}
+			seen[mapped] = true
+			fmt.Fprintf(w, "  %s [label=%q shape=box];\n", sanitizeDOTID(mapped), mapped)
+		}
+	}
+
+	for _, t := range s.Transitions() {
+		from := stateEndpointID(t.From, true)
+		to := stateEndpointID(t.To, false)
+		attrs := ""
+		if t.Event != "" {
+			attrs = fmt.Sprintf(" [label=%q]", t.Event)
+		}
+		fmt.Fprintf(w, "  %s -> %s%s;\n", sanitizeDOTID(from), sanitizeDOTID(to), attrs)
+	}
+
+	for i, n := range s.Notes() {
+		if n.State == "" {
+			continue
+		}
+		nid := fmt.Sprintf("statenote_%d", i)
+		fmt.Fprintf(w, "  %s [label=%q shape=note];\n", nid, n.Text)
+		fmt.Fprintf(w, "  %s -> %s [style=dotted arrowhead=none];\n", nid, sanitizeDOTID(stateEndpointID(n.State, false)))
+	}
+
+	fmt.Fprintln(w, "}")
+	return nil
+}
+
+// writeStateNode writes a single state (or composite cluster) as DOT.
+func writeStateNode(w io.Writer, st ast.DiagramState, indent string) {
+	if len(st.Children) > 0 {
+		label := st.Label
+		if label == "" {
+			label = st.ID
+		}
+		fmt.Fprintf(w, "%ssubgraph cluster_%s {\n", indent, sanitizeDOTID(st.ID))
+		fmt.Fprintf(w, "%s  label=%q;\n", indent, label)
+		for _, child := range st.Children {
+			writeStateNode(w, child, indent+"  ")
+		}
+		fmt.Fprintf(w, "%s}\n", indent)
+		return
+	}
+
+	id := sanitizeDOTID(st.ID)
+	label := st.Label
+	if label == "" {
+		label = st.ID
+	}
+	switch st.Kind {
+	case ast.StateStart:
+		fmt.Fprintf(w, "%s%s [label=%q shape=circle style=filled fillcolor=black width=0.3 fixedsize=true];\n", indent, id, label)
+	case ast.StateEnd:
+		fmt.Fprintf(w, "%s%s [label=%q shape=doublecircle width=0.35 fixedsize=true];\n", indent, id, label)
+	case ast.StateFork, ast.StateJoin:
+		fmt.Fprintf(w, "%s%s [label=\"\" shape=box style=filled fillcolor=black width=1.2 height=0.15 fixedsize=true];\n", indent, id)
+	case ast.StateChoice:
+		fmt.Fprintf(w, "%s%s [label=%q shape=diamond];\n", indent, id, label)
+	default:
+		fmt.Fprintf(w, "%s%s [label=%q shape=box];\n", indent, id, label)
+	}
+}
+
+// markStateIDs records declared state IDs, recursing into composites.
+func markStateIDs(st ast.DiagramState, declared map[string]bool) {
+	declared[st.ID] = true
+	for _, child := range st.Children {
+		markStateIDs(child, declared)
+	}
+}
+
+// stateEndpointID maps Mermaid state references to DOT node IDs. The [*]
+// pseudo-state (and bare "start"/"end" kinds) maps to synthetic __start/__end
+// nodes based on edge position; everything else maps to its own ID.
+func stateEndpointID(id string, isSource bool) string {
+	switch id {
+	case "[*]":
+		if isSource {
+			return "__start"
+		}
+		return "__end"
+	case string(ast.StateStart):
+		return "__start"
+	case string(ast.StateEnd):
+		return "__end"
+	default:
+		return id
+	}
 }

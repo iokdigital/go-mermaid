@@ -29,7 +29,7 @@ go-mermaid provides a programmatic Go API for building and rendering Mermaid dia
 |------|-----------------|-----|-----|-----|------|-----|
 | Flowchart | `flowchart` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Sequence | `sequenceDiagram` | ✅ | ✅ | ✅ | ✅ | — |
-| State | `stateDiagram-v2` | ✅ | ✅ | ✅ | ✅ | — |
+| State | `stateDiagram-v2` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ER | `erDiagram` | ✅ | ✅ | ✅ | ✅ | — |
 | Class | `classDiagram` | ✅ | ✅ | ✅ | ✅ | — |
 
@@ -159,7 +159,7 @@ const (
     FormatHTML     OutputFormat = "html"      // Standalone HTML
     FormatPDF      OutputFormat = "pdf"      // PDF document
     FormatJSON     OutputFormat = "json"     // Diagram AST as JSON
-    FormatDOT      OutputFormat = "dot"      // Graphviz DOT (flowchart, sequence)
+    FormatDOT      OutputFormat = "dot"      // Graphviz DOT (flowchart, sequence, state)
     FormatMarkdown OutputFormat = "md"       // Markdown with fenced code block
 )
 ```
@@ -448,7 +448,7 @@ go-mermaid/
 ├── pdf/    # → PDF document
 ├── html/   # → Standalone HTML (mermaid.js CDN)
 ├── json/   # → Diagram AST as JSON
-└── dot/    # → Graphviz DOT (flowchart only)
+└── dot/    # → Graphviz DOT (flowchart, sequence, state)
 ```
 
 **You only need to import:**

@@ -1,4 +1,4 @@
-// Package dot encodes flowchart, sequence, and state diagram ASTs to Graphviz DOT format.
+// Package dot encodes flowchart, sequence, state, and ER diagram ASTs to Graphviz DOT format.
 // Other diagram types return ErrRendererNotAvailable.
 package dot
 
@@ -12,7 +12,7 @@ import (
 )
 
 // Encode writes a Graphviz DOT representation of d to w.
-// Flowchart, sequence, and state diagrams are supported; other types return a
+// Flowchart, sequence, state, and ER diagrams are supported; other types return a
 // FallbackFormatError wrapping ErrRendererNotAvailable.
 func Encode(w io.Writer, d diagram.Diagram) error {
 	switch v := d.(type) {
@@ -22,6 +22,8 @@ func Encode(w io.Writer, d diagram.Diagram) error {
 		return encodeSequence(w, v)
 	case *ast.StateDiagram:
 		return encodeState(w, v)
+	case *ast.ERDiagram:
+		return encodeER(w, v)
 	default:
 		return &diagram.FallbackFormatError{
 			Err:      fmt.Errorf("dot: %w: %T", diagram.ErrRendererNotAvailable, d),
@@ -502,4 +504,114 @@ func stateEndpointID(id string, isSource bool) string {
 	default:
 		return id
 	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ER
+// ────────────────────────────────────────────────────────────────────────────
+
+// encodeER writes a Graphviz DOT representation of an ER diagram.
+//
+// Mapping notes:
+//   - entities become shape=record nodes; the entity name is the first field
+//     and each attribute renders as "{type} {name} {KEYS}" (mirroring the MMD
+//     encoder), one field per record compartment separated by "|";
+//   - record-special characters ({, }, |, <, >) in names are backslash-escaped
+//     so Graphviz parses the label as literal text (see dotRecordEscape);
+//   - relationships become edges with arrowhead=none (ER connectors carry no
+//     direction); non-identifying ("..") relations map to style=dashed;
+//   - endpoint cardinalities map to taillabel/headlabel so both symbols are
+//     preserved verbatim; the relationship label maps to the edge label;
+//   - entities referenced only by relations (never declared via AddEntity)
+//     are emitted as plain box nodes so the graph is complete.
+func encodeER(w io.Writer, e *ast.ERDiagram) error {
+	fmt.Fprintln(w, "digraph {")
+	fmt.Fprintln(w, "  rankdir=TB;")
+	if title := e.Title(); title != "" {
+		fmt.Fprintf(w, "  label=%q;\n", title)
+		fmt.Fprintln(w, "  labelloc=t;")
+	}
+	fmt.Fprintln(w, "  node [fontname=Helvetica shape=record];")
+
+	declared := make(map[string]bool, len(e.Entities()))
+	for _, en := range e.Entities() {
+		declared[en.Name] = true
+		fields := make([]string, 0, len(en.Attributes)+1)
+		fields = append(fields, dotRecordEscape(en.Name))
+		for _, attr := range en.Attributes {
+			fields = append(fields, dotRecordEscape(erAttributeText(attr)))
+		}
+		fmt.Fprintf(w, "  %s [label=\"{%s}\"];\n", sanitizeDOTID(en.Name), strings.Join(fields, "|"))
+	}
+
+	// Emit relation-only entities so every edge endpoint exists as a node.
+	seen := make(map[string]bool)
+	for _, r := range e.Relations() {
+		for _, name := range []string{r.From, r.To} {
+			if declared[name] || seen[name] {
+				continue
+			}
+			seen[name] = true
+			fmt.Fprintf(w, "  %s [label=%q shape=box];\n", sanitizeDOTID(name), name)
+		}
+	}
+
+	for _, r := range e.Relations() {
+		attrs := []string{"arrowhead=none"}
+		if r.Label != "" {
+			attrs = append(attrs, fmt.Sprintf("label=%q", r.Label))
+		}
+		if string(r.FromCard) != "" {
+			attrs = append(attrs, fmt.Sprintf("taillabel=%q", string(r.FromCard)))
+		}
+		if string(r.ToCard) != "" {
+			attrs = append(attrs, fmt.Sprintf("headlabel=%q", string(r.ToCard)))
+		}
+		if !r.Identifying {
+			attrs = append(attrs, "style=dashed")
+		}
+		fmt.Fprintf(w, "  %s -> %s [%s];\n", sanitizeDOTID(r.From), sanitizeDOTID(r.To), strings.Join(attrs, " "))
+	}
+
+	fmt.Fprintln(w, "}")
+	return nil
+}
+
+// erAttributeText formats one ER attribute the same way the MMD encoder does:
+// "{type} {name} {KEYS}" with an optional trailing comment in quotes.
+func erAttributeText(attr ast.ERAttribute) string {
+	var b strings.Builder
+	b.WriteString(attr.DataType)
+	if attr.Name != "" {
+		if b.Len() > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(attr.Name)
+	}
+	for _, k := range attr.Keys {
+		b.WriteString(" ")
+		b.WriteString(string(k))
+	}
+	if attr.Comment != "" {
+		b.WriteString(` "`)
+		b.WriteString(attr.Comment)
+		b.WriteString(`"`)
+	}
+	return b.String()
+}
+
+// dotRecordEscape escapes characters that are structural in DOT record labels
+// ({, }, |, <, >) plus backslash and double-quote, so the label renders as
+// literal text. The caller wraps the result in double quotes.
+func dotRecordEscape(s string) string {
+	r := strings.NewReplacer(
+		`\`, `\\`,
+		`"`, `\"`,
+		`{`, `\{`,
+		`}`, `\}`,
+		`|`, `\|`,
+		`<`, `\<`,
+		`>`, `\>`,
+	)
+	return r.Replace(s)
 }

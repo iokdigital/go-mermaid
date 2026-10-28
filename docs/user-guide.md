@@ -31,7 +31,7 @@ go-mermaid provides a programmatic Go API for building and rendering Mermaid dia
 | Sequence | `sequenceDiagram` | ✅ | ✅ | ✅ | ✅ | — |
 | State | `stateDiagram-v2` | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ER | `erDiagram` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Class | `classDiagram` | ✅ | ✅ | ✅ | ✅ | — |
+| Class | `classDiagram` | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 **Phase 2 types** (`pie`, `quadrantChart`, `gantt`, `mindmap`) are defined in the API but
 currently render to Mermaid source only. Use `FormatMMD` or `FormatHTML` for these types.
@@ -159,7 +159,7 @@ const (
     FormatHTML     OutputFormat = "html"      // Standalone HTML
     FormatPDF      OutputFormat = "pdf"      // PDF document
     FormatJSON     OutputFormat = "json"     // Diagram AST as JSON
-    FormatDOT      OutputFormat = "dot"      // Graphviz DOT (flowchart, sequence, state, er)
+    FormatDOT      OutputFormat = "dot"      // Graphviz DOT (flowchart, sequence, state, er, class)
     FormatMarkdown OutputFormat = "md"       // Markdown with fenced code block
 )
 ```
@@ -448,7 +448,7 @@ go-mermaid/
 ├── pdf/    # → PDF document
 ├── html/   # → Standalone HTML (mermaid.js CDN)
 ├── json/   # → Diagram AST as JSON
-└── dot/    # → Graphviz DOT (flowchart, sequence, state, er)
+└── dot/    # → Graphviz DOT (flowchart, sequence, state, er, class)
 ```
 
 **You only need to import:**
@@ -473,7 +473,7 @@ Building diagrams programmatically in Go gives you type safety, compile-time che
 
 **Q: What diagram types are supported?**
 
-All Phase 1 types (flowchart, sequence, state, ER, class) render to SVG, PNG, PDF, JSON, HTML, and MMD; DOT additionally covers flowchart, sequence, state, and ER (class returns a fallback error). Phase 2 types (pie, gantt, mindmap, quadrantChart) are defined in the API but currently only render to Mermaid source and HTML. SVG/PNG/PDF output for Phase 2 types is planned.
+All Phase 1 types (flowchart, sequence, state, ER, class) render to SVG, PNG, PDF, JSON, HTML, MMD, and DOT. Phase 2 types (pie, gantt, mindmap, quadrantChart) are defined in the API but currently only render to Mermaid source and HTML. SVG/PNG/PDF output for Phase 2 types is planned.
 
 **Q: Does this require an internet connection?**
 

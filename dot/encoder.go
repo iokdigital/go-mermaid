@@ -1,4 +1,4 @@
-// Package dot encodes flowchart, sequence, state, and ER diagram ASTs to Graphviz DOT format.
+// Package dot encodes flowchart, sequence, state, ER, and class diagram ASTs to Graphviz DOT format.
 // Other diagram types return ErrRendererNotAvailable.
 package dot
 
@@ -12,7 +12,7 @@ import (
 )
 
 // Encode writes a Graphviz DOT representation of d to w.
-// Flowchart, sequence, state, and ER diagrams are supported; other types return a
+// Flowchart, sequence, state, ER, and class diagrams are supported; other types return a
 // FallbackFormatError wrapping ErrRendererNotAvailable.
 func Encode(w io.Writer, d diagram.Diagram) error {
 	switch v := d.(type) {
@@ -24,6 +24,8 @@ func Encode(w io.Writer, d diagram.Diagram) error {
 		return encodeState(w, v)
 	case *ast.ERDiagram:
 		return encodeER(w, v)
+	case *ast.ClassDiagram:
+		return encodeClass(w, v)
 	default:
 		return &diagram.FallbackFormatError{
 			Err:      fmt.Errorf("dot: %w: %T", diagram.ErrRendererNotAvailable, d),
@@ -614,4 +616,159 @@ func dotRecordEscape(s string) string {
 		`>`, `\>`,
 	)
 	return r.Replace(s)
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Class
+// ────────────────────────────────────────────────────────────────────────────
+
+// encodeClass writes a Graphviz DOT representation of a class diagram.
+//
+// Mapping notes:
+//   - classes become shape=record nodes; the class name is the first field,
+//     followed by one compartment for attributes (non-method members) and one
+//     for methods, each member on its own left-justified line with the same
+//     member text the MMD encoder emits; annotations (e.g. "<<interface>>")
+//     render as a leading compartment;
+//   - record-special characters ({, }, |, <, >) in names are backslash-escaped
+//     so Graphviz parses the label as literal text (see dotRecordEscape);
+//   - namespaces are not represented as clusters (matching the MMD encoder,
+//     which also ignores them); the node ID is the sanitized class name;
+//   - relationships become edges preserving the From -> To direction with the
+//     decorator at the head end (matching the SVG renderer): inheritance and
+//     realization use arrowhead=empty (realization adds style=dashed),
+//     composition/aggregation use a tail diamond (arrowtail=diamond/odiamond
+//     with dir=both and arrowhead=none), dependency maps to style=dashed,
+//     links map to arrowhead=none, and associations keep the default arrow;
+//   - endpoint cardinalities map to taillabel/headlabel and the relationship
+//     label maps to the edge label;
+//   - classes referenced only by relations (never declared via AddClass) are
+//     emitted as plain box nodes so the graph is complete;
+//   - notes become shape=note nodes linked to their class with dotted edges.
+func encodeClass(w io.Writer, c *ast.ClassDiagram) error {
+	fmt.Fprintln(w, "digraph {")
+	fmt.Fprintln(w, "  rankdir=TB;")
+	if title := c.Title(); title != "" {
+		fmt.Fprintf(w, "  label=%q;\n", title)
+		fmt.Fprintln(w, "  labelloc=t;")
+	}
+	fmt.Fprintln(w, "  node [fontname=Helvetica shape=record];")
+
+	declared := make(map[string]bool, len(c.Classes()))
+	for _, cl := range c.Classes() {
+		declared[cl.Name] = true
+		fields := make([]string, 0, 4)
+		if cl.Annotation != "" {
+			fields = append(fields, dotRecordEscape(cl.Annotation))
+		}
+		fields = append(fields, dotRecordEscape(cl.Name))
+		if attrs := classMembers(cl.Members, false); attrs != "" {
+			fields = append(fields, attrs)
+		}
+		if methods := classMembers(cl.Members, true); methods != "" {
+			fields = append(fields, methods)
+		}
+		fmt.Fprintf(w, "  %s [label=\"{%s}\"];\n", sanitizeDOTID(cl.Name), strings.Join(fields, "|"))
+	}
+
+	// Emit relation-only classes so every edge endpoint exists as a node.
+	seen := make(map[string]bool)
+	for _, r := range c.Relations() {
+		for _, name := range []string{r.From, r.To} {
+			if declared[name] || seen[name] {
+				continue
+			}
+			seen[name] = true
+			fmt.Fprintf(w, "  %s [label=%q shape=box];\n", sanitizeDOTID(name), name)
+		}
+	}
+
+	for _, r := range c.Relations() {
+		attrs := classEdgeAttrs(r)
+		fmt.Fprintf(w, "  %s -> %s [%s];\n", sanitizeDOTID(r.From), sanitizeDOTID(r.To), strings.Join(attrs, " "))
+	}
+
+	for i, n := range c.Notes() {
+		if n.Class == "" {
+			continue
+		}
+		nid := fmt.Sprintf("classnote_%d", i)
+		fmt.Fprintf(w, "  %s [label=%q shape=note];\n", nid, n.Text)
+		fmt.Fprintf(w, "  %s -> %s [style=dotted arrowhead=none];\n", nid, sanitizeDOTID(n.Class))
+	}
+
+	fmt.Fprintln(w, "}")
+	return nil
+}
+
+// classMembers formats the attribute (methods=false) or method (methods=true)
+// members of a class as one record compartment, one left-justified line per
+// member. Member text mirrors the MMD encoder (see classMemberText); the "\l"
+// line breaks are appended after escaping so they survive as separators.
+func classMembers(members []ast.ClassMember, methods bool) string {
+	var b strings.Builder
+	for _, m := range members {
+		if m.IsMethod != methods {
+			continue
+		}
+		b.WriteString(dotRecordEscape(classMemberText(m)))
+		b.WriteString(`\l`)
+	}
+	return b.String()
+}
+
+// classMemberText formats one class member the same way the MMD encoder does:
+// "{visibility}{type} {name}" with "()" for methods and "$"/"*" suffixes for
+// static/abstract members.
+func classMemberText(m ast.ClassMember) string {
+	var b strings.Builder
+	b.WriteString(string(m.Visibility))
+	if m.Type != "" {
+		b.WriteString(m.Type)
+		b.WriteString(" ")
+	}
+	b.WriteString(m.Name)
+	if m.IsMethod {
+		b.WriteString("()")
+	}
+	if m.IsStatic {
+		b.WriteString("$")
+	}
+	if m.IsAbstract {
+		b.WriteString("*")
+	}
+	return b.String()
+}
+
+// classEdgeAttrs maps a class relation to DOT edge attributes, preserving the
+// From -> To direction with the decorator at the head end (matching the SVG
+// renderer).
+func classEdgeAttrs(r ast.ClassRelation) []string {
+	attrs := make([]string, 0, 5)
+	switch r.Kind {
+	case ast.RelInheritance:
+		attrs = append(attrs, "arrowhead=empty")
+	case ast.RelRealization:
+		attrs = append(attrs, "arrowhead=empty", "style=dashed")
+	case ast.RelComposition:
+		attrs = append(attrs, "dir=both", "arrowtail=diamond", "arrowhead=none")
+	case ast.RelAggregation:
+		attrs = append(attrs, "dir=both", "arrowtail=odiamond", "arrowhead=none")
+	case ast.RelDependency:
+		attrs = append(attrs, "style=dashed")
+	case ast.RelLink:
+		attrs = append(attrs, "arrowhead=none")
+	case ast.RelAssociation:
+		// Default solid arrow; no decorator attributes needed.
+	}
+	if r.Label != "" {
+		attrs = append(attrs, fmt.Sprintf("label=%q", r.Label))
+	}
+	if r.CardFrom != "" {
+		attrs = append(attrs, fmt.Sprintf("taillabel=%q", r.CardFrom))
+	}
+	if r.CardTo != "" {
+		attrs = append(attrs, fmt.Sprintf("headlabel=%q", r.CardTo))
+	}
+	return attrs
 }

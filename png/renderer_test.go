@@ -238,7 +238,7 @@ func stripTextElements(t *testing.T, svgData []byte) []byte {
 // the overlay pass added. The assertion is a global floor of 200 changed
 // pixels plus a per-fixture floor recorded at ~50% of the first-run value
 // (first run: flowchart 1379, sequence 730, pie 3622, quadrant 4600,
-// gantt 3524, mindmap 1948 — pure-Go rasterization is deterministic, verified
+// gantt 3524, mindmap 1948, state 1410, er 2898, class 1520 — pure-Go rasterization is deterministic, verified
 // bit-identical across runs). NOTE: the task spec suggested a 1% relative
 // floor, but measured text coverage is 0.15–0.53% of pixels — glyphs are
 // sparse on large canvases, so 1% is unachievable without stuffing fixtures
@@ -277,6 +277,31 @@ func TestPNGTextCoverage(t *testing.T) {
 	root.AddChild(ast.NewMindNode("Kid Two"))
 	mind.SetRoot(root)
 
+	state := ast.NewState("Lifecycle")
+	state.AddState(ast.DiagramState{ID: "Idle", Kind: ast.StateNormal})
+	state.AddState(ast.DiagramState{ID: "Done", Kind: ast.StateNormal})
+	state.AddTransition(ast.StateTransition{From: "Idle", To: "Done", Event: "finish"})
+
+	er := ast.NewER("Schema")
+	er.AddEntity(ast.EREntity{Name: "User", Attributes: []ast.ERAttribute{
+		{DataType: "int", Name: "id", Keys: []ast.ERKey{ast.KeyPrimary}},
+	}})
+	er.AddEntity(ast.EREntity{Name: "Order", Attributes: []ast.ERAttribute{
+		{DataType: "int", Name: "id", Keys: []ast.ERKey{ast.KeyPrimary}},
+	}})
+	er.AddRelation(ast.ERRelation{
+		From: "User", To: "Order",
+		FromCard: ast.CardExactOne, ToCard: ast.CardZeroMany, Label: "places",
+	})
+
+	class := ast.NewClass("Model")
+	class.AddClass(ast.DiagramClass{
+		Name: "Repo",
+		Members: []ast.ClassMember{
+			{Visibility: ast.VisPublic, Type: "string", Name: "title"},
+		},
+	})
+
 	cases := []struct {
 		name       string
 		d          diagram.Diagram
@@ -288,6 +313,9 @@ func TestPNGTextCoverage(t *testing.T) {
 		{"quadrant", quad, 2300},
 		{"gantt", gantt, 1700},
 		{"mindmap", mind, 900},
+		{"state", state, 700},
+		{"er", er, 1400},
+		{"class", class, 750},
 	}
 
 	for _, tc := range cases {
@@ -313,6 +341,21 @@ func TestPNGTextCoverage(t *testing.T) {
 			baseImg, _, err := image.Decode(bytes.NewReader(baseBuf.Bytes()))
 			if err != nil {
 				t.Fatalf("decode baseline PNG: %v", err)
+			}
+			// The baseline must contain shapes: otherwise the diff below is
+			// meaningless (a blank baseline + text-only image would pass).
+			baseNonWhite := 0
+			bb := baseImg.Bounds()
+			for y := bb.Min.Y; y < bb.Max.Y; y++ {
+				for x := bb.Min.X; x < bb.Max.X; x++ {
+					r, g, b, _ := baseImg.At(x, y).RGBA()
+					if r < 0xffff || g < 0xffff || b < 0xffff {
+						baseNonWhite++
+					}
+				}
+			}
+			if baseNonWhite == 0 {
+				t.Fatalf("baseline PNG for %s is blank, diff is meaningless", tc.name)
 			}
 			if !fullImg.Bounds().Eq(baseImg.Bounds()) {
 				t.Fatalf("bounds differ: full %v vs baseline %v", fullImg.Bounds(), baseImg.Bounds())

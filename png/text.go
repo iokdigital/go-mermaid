@@ -145,14 +145,15 @@ func coords(x, y string) (float64, float64, bool) {
 }
 
 // coordOpt parses one coordinate attribute, reporting whether it is present
-// and numeric.
+// and a finite number. NaN/Inf parse successfully but are not drawable, so
+// they are rejected here rather than wasting a face lookup downstream.
 func coordOpt(s string) (float64, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, false
 	}
 	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
 		return 0, false
 	}
 	return v, true
@@ -202,6 +203,11 @@ var (
 	faceCache = map[faceKey]font.Face{}
 )
 
+// maxFaceSize caps the effective font size: SVG font sizes are ours (≤13px,
+// scaled ≤4x), so anything larger comes from untrusted direct png.Encode input
+// and would waste memory on a giant face.
+const maxFaceSize = 1024.0
+
 // typeface returns a screen-pixel face for size (SVG px) and style. Faces
 // are cached by quantized size and style; the error is descriptive (bad size
 // or corrupt embedded font data) and typeface never panics.
@@ -209,6 +215,7 @@ func typeface(size float64, bold, italic bool) (font.Face, error) {
 	if math.IsNaN(size) || math.IsInf(size, 0) || size <= 0 {
 		return nil, fmt.Errorf("png: invalid font size %v", size)
 	}
+	size = math.Min(size, maxFaceSize)
 	key := faceKey{size64: int64(math.Round(size * 64)), bold: bold, italic: italic}
 
 	faceMu.Lock()

@@ -3,10 +3,11 @@
 //
 // Text labels are rendered by an overlay pass: <text>/<tspan> runs are parsed
 // from the SVG and drawn with golang.org/x/image/font onto the rasterized image.
-// Glyphs use the embedded Go fonts (zero new dependencies).
+// Glyphs use the embedded Go fonts (no modules beyond the existing golang.org/x/image).
 // Positions come straight from the SVG layout, but Go-font advances differ
 // slightly from the Arial/Helvetica metrics browsers use, so labels may drift
-// a few pixels relative to browser rendering.
+// a few pixels relative to browser rendering. Glyphs absent from the Go fonts
+// (e.g. U+27F3 ⟳ used for self-loop edge labels) render as .notdef.
 package png
 
 import (

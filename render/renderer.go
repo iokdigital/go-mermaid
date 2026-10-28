@@ -64,7 +64,7 @@ func (r *DefaultRenderer) RenderTo(w io.Writer, d diagram.Diagram, format diagra
 	case diagram.FormatPNG:
 		svgData, err := r.RenderBytes(d, diagram.FormatSVG)
 		if err != nil {
-			return err // propagates FallbackFormatError from svg for non-flowchart types
+			return err // propagates FallbackFormatError from svg for unsupported types
 		}
 		return diapng.Encode(svgData, w, r.opts)
 	case diagram.FormatPDF:

@@ -1,13 +1,18 @@
 package render_test
 
 import (
+	"bytes"
 	"errors"
+	"image"
 	"strings"
 	"testing"
 
 	diagram "github.com/iokdigital/go-mermaid"
 	"github.com/iokdigital/go-mermaid/ast"
 	"github.com/iokdigital/go-mermaid/render"
+
+	// Register PNG decoder for dimension assertions.
+	_ "image/png"
 )
 
 func newRenderer() *render.DefaultRenderer {
@@ -85,23 +90,87 @@ func TestRendererPDFProducesOutput(t *testing.T) {
 	}
 }
 
-func TestRendererPNGNonFlowchartFallback(t *testing.T) {
-	// Non-flowchart diagrams fall back via svg.Encode's FallbackFormatError.
+func TestRendererPNGAllDiagramTypes(t *testing.T) {
+	// Every AST diagram type supported by svg.Encode must render to a
+	// decodable PNG via the FormatPNG call-site (svg → png).
+	flow := ast.NewFlowchart("", ast.DirectionLR)
+	flow.MustAddNode(&ast.FlowNode{ID: "A", Shape: ast.ShapeRect})
+
+	seq := ast.NewSequence("", false)
+	seq.AddParticipant(ast.Participant{Alias: "A", Kind: ast.ParticipantBox})
+	seq.AddParticipant(ast.Participant{Alias: "B", Kind: ast.ParticipantBox})
+	seq.AddMessage(ast.SeqMessage{From: "A", To: "B", Text: "hi", Style: ast.MsgSync})
+
+	state := ast.NewState("")
+	state.AddState(ast.DiagramState{ID: "Idle", Kind: ast.StateNormal})
+	state.AddTransition(ast.StateTransition{From: "[*]", To: "Idle"})
+
+	er := ast.NewER("")
+	er.AddEntity(ast.EREntity{Name: "USER"})
+	er.AddRelation(ast.ERRelation{
+		From: "USER", To: "ORDER",
+		FromCard: ast.CardExactOne, ToCard: ast.CardZeroMany,
+		Label: "places", Identifying: true,
+	})
+
+	class := ast.NewClass("")
+	class.AddClass(ast.DiagramClass{Name: "Foo"})
+	class.AddRelation(ast.ClassRelation{From: "Foo", To: "Bar", Kind: ast.RelAssociation})
+
+	cases := []struct {
+		name string
+		d    diagram.Diagram
+	}{
+		{"flowchart", flow},
+		{"sequence", seq},
+		{"state", state},
+		{"er", er},
+		{"class", class},
+	}
+
 	r := newRenderer()
-	_, err := r.RenderBytes(&fakeSequence{}, diagram.FormatPNG)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := r.RenderBytes(tc.d, diagram.FormatPNG)
+			if err != nil {
+				t.Fatalf("RenderBytes png (%s): %v", tc.name, err)
+			}
+			if len(data) < 8 || data[0] != 0x89 || data[1] != 'P' || data[2] != 'N' || data[3] != 'G' {
+				t.Fatalf("expected PNG magic bytes in %s output", tc.name)
+			}
+			cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+			if err != nil {
+				t.Fatalf("PNG output (%s) does not decode: %v", tc.name, err)
+			}
+			if cfg.Width <= 0 || cfg.Height <= 0 {
+				t.Errorf("expected positive PNG dimensions for %s, got %dx%d", tc.name, cfg.Width, cfg.Height)
+			}
+		})
+	}
+}
+
+func TestRendererPNGUnsupportedTypeFallback(t *testing.T) {
+	// Diagram types with no AST support (e.g. pie/quadrant/gantt/mindmap,
+	// which have no ast struct and no svg renderer) fall back via
+	// svg.Encode's FallbackFormatError.
+	r := newRenderer()
+	_, err := r.RenderBytes(&fakePie{}, diagram.FormatPNG)
 	if err == nil {
-		t.Fatal("expected error for non-flowchart PNG")
+		t.Fatal("expected error for unsupported PNG diagram type")
 	}
 	var ferr *diagram.FallbackFormatError
 	if !errors.As(err, &ferr) {
 		t.Fatalf("expected FallbackFormatError, got: %T", err)
 	}
+	if ferr.FallbackFormat() != diagram.FormatHTML {
+		t.Errorf("expected fallback HTML, got: %v", ferr.FallbackFormat())
+	}
 }
 
-type fakeSequence struct{}
+type fakePie struct{}
 
-func (s *fakeSequence) Type() diagram.DiagramType { return diagram.TypeSequence }
-func (s *fakeSequence) Title() string             { return "" }
+func (s *fakePie) Type() diagram.DiagramType { return diagram.TypePie }
+func (s *fakePie) Title() string             { return "" }
 
 func TestRendererHTMLProducesOutput(t *testing.T) {
 	f := ast.NewFlowchart("Phase 2", ast.DirectionLR)

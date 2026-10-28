@@ -1,5 +1,5 @@
-// Package dot encodes FlowchartDiagram ASTs to Graphviz DOT format.
-// Only flowchart diagrams are supported; other types return ErrRendererNotAvailable.
+// Package dot encodes flowchart and sequence diagram ASTs to Graphviz DOT format.
+// Other diagram types return ErrRendererNotAvailable.
 package dot
 
 import (
@@ -12,16 +12,20 @@ import (
 )
 
 // Encode writes a Graphviz DOT representation of d to w.
-// Returns a FallbackFormatError wrapping ErrRendererNotAvailable for non-flowchart types.
+// Flowchart and sequence diagrams are supported; other types return a
+// FallbackFormatError wrapping ErrRendererNotAvailable.
 func Encode(w io.Writer, d diagram.Diagram) error {
-	f, ok := d.(*ast.FlowchartDiagram)
-	if !ok {
+	switch v := d.(type) {
+	case *ast.FlowchartDiagram:
+		return encodeFlowchart(w, v)
+	case *ast.SequenceDiagram:
+		return encodeSequence(w, v)
+	default:
 		return &diagram.FallbackFormatError{
 			Err:      fmt.Errorf("dot: %w: %T", diagram.ErrRendererNotAvailable, d),
 			Fallback: diagram.FormatMMD,
 		}
 	}
-	return encodeFlowchart(w, f)
 }
 
 func encodeFlowchart(w io.Writer, f *ast.FlowchartDiagram) error {
@@ -185,4 +189,152 @@ func indexNodes(nodes []*ast.FlowNode) map[string]*ast.FlowNode {
 		m[n.ID] = n
 	}
 	return m
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Sequence
+// ────────────────────────────────────────────────────────────────────────────
+
+// encodeSequence writes a Graphviz DOT representation of a sequence diagram.
+//
+// Mapping notes (DOT has no native sequence concept):
+//   - participants become box nodes (ellipse for actors); time flows top-down
+//     (rankdir=TB);
+//   - messages become labelled edges; dashed MessageStyles map to
+//     style=dashed, cross-end styles to arrowhead=tee, open-arrow styles to
+//     arrowhead=vee, and no-arrow styles to arrowhead=none;
+//   - autonumber prefixes each message label with its 1-based sequence number
+//     in emission order (top-level, loops, alts), matching the SVG renderer;
+//   - activation/deactivation is appended to the edge label as " [+]" / " [-]";
+//   - loops and alt/else branches become cluster subgraphs; notes become
+//     shape=note nodes linked to their participants with dotted edges.
+func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
+	fmt.Fprintln(w, "digraph {")
+	fmt.Fprintln(w, "  rankdir=TB;")
+	if title := s.Title(); title != "" {
+		fmt.Fprintf(w, "  label=%q;\n", title)
+		fmt.Fprintln(w, "  labelloc=t;")
+	}
+	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+
+	for _, p := range s.Participants() {
+		id := sanitizeDOTID(p.Alias)
+		label := p.Label
+		if label == "" {
+			label = p.Alias
+		}
+		shape := "box"
+		if p.Kind == ast.ParticipantActor {
+			shape = "ellipse"
+		}
+		fmt.Fprintf(w, "  %s [label=%q shape=%s];\n", id, label, shape)
+	}
+
+	number := 0 // autonumber counter shared across all message groups
+	nextLabel := func(text string) string {
+		if s.Autonumber() {
+			number++
+			if text != "" {
+				return fmt.Sprintf("%d: %s", number, text)
+			}
+			return fmt.Sprintf("%d", number)
+		}
+		return text
+	}
+
+	for _, m := range s.Messages() {
+		writeSeqEdge(w, m.From, m.To, nextLabel(m.Text), m.Style, m.Activate, m.Deactivate, "  ")
+	}
+
+	for i, l := range s.Loops() {
+		label := "loop"
+		if l.Label != "" {
+			label = "loop: " + l.Label
+		}
+		fmt.Fprintf(w, "  subgraph cluster_seq_loop_%d {\n", i)
+		fmt.Fprintf(w, "    label=%q;\n", label)
+		for _, m := range l.Messages {
+			writeSeqEdge(w, m.From, m.To, nextLabel(m.Text), m.Style, m.Activate, m.Deactivate, "    ")
+		}
+		fmt.Fprintln(w, "  }")
+	}
+
+	for i, a := range s.Alts() {
+		label := "alt"
+		if a.Condition != "" {
+			label = "alt: " + a.Condition
+		}
+		fmt.Fprintf(w, "  subgraph cluster_seq_alt_%d {\n", i)
+		fmt.Fprintf(w, "    label=%q;\n", label)
+		for _, m := range a.Messages {
+			writeSeqEdge(w, m.From, m.To, nextLabel(m.Text), m.Style, m.Activate, m.Deactivate, "    ")
+		}
+		fmt.Fprintln(w, "  }")
+		if len(a.Else) > 0 {
+			fmt.Fprintf(w, "  subgraph cluster_seq_alt_%d_else {\n", i)
+			fmt.Fprintln(w, `    label="else";`)
+			for _, m := range a.Else {
+				writeSeqEdge(w, m.From, m.To, nextLabel(m.Text), m.Style, m.Activate, m.Deactivate, "    ")
+			}
+			fmt.Fprintln(w, "  }")
+		}
+	}
+
+	for i, n := range s.Notes() {
+		if len(n.Over) == 0 {
+			continue
+		}
+		nid := fmt.Sprintf("seqnote_%d", i)
+		fmt.Fprintf(w, "  %s [label=%q shape=note];\n", nid, n.Text)
+		for _, over := range n.Over {
+			fmt.Fprintf(w, "  %s -> %s [style=dotted arrowhead=none];\n", nid, sanitizeDOTID(over))
+		}
+	}
+
+	fmt.Fprintln(w, "}")
+	return nil
+}
+
+// writeSeqEdge writes a single sequence message as a DOT edge.
+func writeSeqEdge(w io.Writer, from, to, label string, style ast.MessageStyle, activate, deactivate bool, indent string) {
+	if activate {
+		if label != "" {
+			label += " [+]"
+		} else {
+			label = "[+]"
+		}
+	} else if deactivate {
+		if label != "" {
+			label += " [-]"
+		} else {
+			label = "[-]"
+		}
+	}
+
+	attrs := make([]string, 0, 3)
+	if label != "" {
+		attrs = append(attrs, fmt.Sprintf("label=%q", label))
+	}
+	// MsgSync and the zero-value style both render as a plain solid arrow.
+	switch style {
+	case ast.MsgAsync:
+		attrs = append(attrs, "style=dashed")
+	case ast.MsgSyncNoArrow:
+		attrs = append(attrs, "arrowhead=none")
+	case ast.MsgAsyncNoArrow:
+		attrs = append(attrs, "style=dashed", "arrowhead=none")
+	case ast.MsgSyncX:
+		attrs = append(attrs, "arrowhead=tee")
+	case ast.MsgAsyncX:
+		attrs = append(attrs, "style=dashed", "arrowhead=tee")
+	case ast.MsgOpen:
+		attrs = append(attrs, "arrowhead=vee")
+	case ast.MsgAsyncOpen:
+		attrs = append(attrs, "style=dashed", "arrowhead=vee")
+	}
+	attrStr := ""
+	if len(attrs) > 0 {
+		attrStr = " [" + strings.Join(attrs, " ") + "]"
+	}
+	fmt.Fprintf(w, "%s%s -> %s%s;\n", indent, sanitizeDOTID(from), sanitizeDOTID(to), attrStr)
 }

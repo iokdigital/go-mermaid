@@ -35,3 +35,22 @@ scripts/pele-diff/node_modules/
 
 # Knowledge graph (generated, local only)
 graphify-out/
+# Secrets / env
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.*.example
+# Release artifacts
+release/*.tar.gz
+release/*.zip
+release/*.tgz
+# Test outputs / caches
+test_*_output/
+*_test_output/
+coverage/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Graphify

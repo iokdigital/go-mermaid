@@ -98,7 +98,7 @@ func (r *DefaultRenderer) RenderToFile(path string, d diagram.Diagram, format di
 	if err != nil {
 		return fmt.Errorf("create file %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return r.RenderTo(f, d, format)
 }
 

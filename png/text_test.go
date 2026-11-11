@@ -112,7 +112,7 @@ func TestAnchorColumns(t *testing.T) {
 		return out
 	}
 	s, m, e := leftmost("start"), leftmost("middle"), leftmost("end")
-	if !(e < m && m < s) {
+	if e >= m || m >= s {
 		t.Errorf("expected leftmost columns end < middle < start, got end=%d middle=%d start=%d", e, m, s)
 	}
 }

@@ -49,13 +49,13 @@ func encodeFlowchart(w io.Writer, f *ast.FlowchartDiagram) error {
 	rankdir := dirToRankdir(f.Direction())
 	title := f.Title()
 
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintf(w, "  rankdir=%s;\n", rankdir)
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintf(w, "  rankdir=%s;\n", rankdir)
 	if title != "" {
-		fmt.Fprintf(w, "  label=%q;\n", title)
-		fmt.Fprintln(w, "  labelloc=t;")
+		_, _ = fmt.Fprintf(w, "  label=%q;\n", title)
+		_, _ = fmt.Fprintln(w, "  labelloc=t;")
 	}
-	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+	_, _ = fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
 
 	for _, sg := range f.Subgraphs() {
 		sgID := sanitizeDOTID(sg.ID)
@@ -63,15 +63,15 @@ func encodeFlowchart(w io.Writer, f *ast.FlowchartDiagram) error {
 		if label == "" {
 			label = sg.ID
 		}
-		fmt.Fprintf(w, "  subgraph cluster_%s {\n", sgID)
-		fmt.Fprintf(w, "    label=%q;\n", label)
+		_, _ = fmt.Fprintf(w, "  subgraph cluster_%s {\n", sgID)
+		_, _ = fmt.Fprintf(w, "    label=%q;\n", label)
 		nodeByID := indexNodes(f.Nodes())
 		for _, nid := range sg.Nodes {
 			if n, ok := nodeByID[nid]; ok {
 				writeNode(w, n, "    ")
 			}
 		}
-		fmt.Fprintln(w, "  }")
+		_, _ = fmt.Fprintln(w, "  }")
 	}
 
 	// Emit nodes not in any subgraph.
@@ -91,7 +91,7 @@ func encodeFlowchart(w io.Writer, f *ast.FlowchartDiagram) error {
 		writeEdge(w, e)
 	}
 
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 	return nil
 }
 
@@ -107,7 +107,7 @@ func writeNode(w io.Writer, n *ast.FlowNode, indent string) {
 		fill := confidenceFill(n.Confidence)
 		attrs += fmt.Sprintf(" style=filled fillcolor=%q", fill)
 	}
-	fmt.Fprintf(w, "%s%s [%s];\n", indent, id, attrs)
+	_, _ = fmt.Fprintf(w, "%s%s [%s];\n", indent, id, attrs)
 }
 
 func writeEdge(w io.Writer, e *ast.FlowEdge) {
@@ -139,7 +139,7 @@ func writeEdge(w io.Writer, e *ast.FlowEdge) {
 			attrs = " [arrowhead=none]"
 		}
 	}
-	fmt.Fprintf(w, "  %s -> %s%s;\n", from, to, attrs)
+	_, _ = fmt.Fprintf(w, "  %s -> %s%s;\n", from, to, attrs)
 }
 
 func dirToRankdir(d ast.Direction) string {
@@ -226,13 +226,13 @@ func indexNodes(nodes []*ast.FlowNode) map[string]*ast.FlowNode {
 //   - loops and alt/else branches become cluster subgraphs; notes become
 //     shape=note nodes linked to their participants with dotted edges.
 func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintln(w, "  rankdir=TB;")
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintln(w, "  rankdir=TB;")
 	if title := s.Title(); title != "" {
-		fmt.Fprintf(w, "  label=%q;\n", title)
-		fmt.Fprintln(w, "  labelloc=t;")
+		_, _ = fmt.Fprintf(w, "  label=%q;\n", title)
+		_, _ = fmt.Fprintln(w, "  labelloc=t;")
 	}
-	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+	_, _ = fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
 
 	for _, p := range s.Participants() {
 		id := sanitizeDOTID(p.Alias)
@@ -244,7 +244,7 @@ func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
 		if p.Kind == ast.ParticipantActor {
 			shape = "ellipse"
 		}
-		fmt.Fprintf(w, "  %s [label=%q shape=%s];\n", id, label, shape)
+		_, _ = fmt.Fprintf(w, "  %s [label=%q shape=%s];\n", id, label, shape)
 	}
 
 	number := 0 // autonumber counter shared across all message groups
@@ -268,12 +268,12 @@ func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
 		if l.Label != "" {
 			label = "loop: " + l.Label
 		}
-		fmt.Fprintf(w, "  subgraph cluster_seq_loop_%d {\n", i)
-		fmt.Fprintf(w, "    label=%q;\n", label)
+		_, _ = fmt.Fprintf(w, "  subgraph cluster_seq_loop_%d {\n", i)
+		_, _ = fmt.Fprintf(w, "    label=%q;\n", label)
 		for _, m := range l.Messages {
 			writeSeqEdge(w, m.From, m.To, nextLabel(m.Text), m.Style, m.Activate, m.Deactivate, "    ")
 		}
-		fmt.Fprintln(w, "  }")
+		_, _ = fmt.Fprintln(w, "  }")
 	}
 
 	for i, a := range s.Alts() {
@@ -281,19 +281,19 @@ func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
 		if a.Condition != "" {
 			label = "alt: " + a.Condition
 		}
-		fmt.Fprintf(w, "  subgraph cluster_seq_alt_%d {\n", i)
-		fmt.Fprintf(w, "    label=%q;\n", label)
+		_, _ = fmt.Fprintf(w, "  subgraph cluster_seq_alt_%d {\n", i)
+		_, _ = fmt.Fprintf(w, "    label=%q;\n", label)
 		for _, m := range a.Messages {
 			writeSeqEdge(w, m.From, m.To, nextLabel(m.Text), m.Style, m.Activate, m.Deactivate, "    ")
 		}
-		fmt.Fprintln(w, "  }")
+		_, _ = fmt.Fprintln(w, "  }")
 		if len(a.Else) > 0 {
-			fmt.Fprintf(w, "  subgraph cluster_seq_alt_%d_else {\n", i)
-			fmt.Fprintln(w, `    label="else";`)
+			_, _ = fmt.Fprintf(w, "  subgraph cluster_seq_alt_%d_else {\n", i)
+			_, _ = fmt.Fprintln(w, `    label="else";`)
 			for _, m := range a.Else {
 				writeSeqEdge(w, m.From, m.To, nextLabel(m.Text), m.Style, m.Activate, m.Deactivate, "    ")
 			}
-			fmt.Fprintln(w, "  }")
+			_, _ = fmt.Fprintln(w, "  }")
 		}
 	}
 
@@ -302,13 +302,13 @@ func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
 			continue
 		}
 		nid := fmt.Sprintf("seqnote_%d", i)
-		fmt.Fprintf(w, "  %s [label=%q shape=note];\n", nid, n.Text)
+		_, _ = fmt.Fprintf(w, "  %s [label=%q shape=note];\n", nid, n.Text)
 		for _, over := range n.Over {
-			fmt.Fprintf(w, "  %s -> %s [style=dotted arrowhead=none];\n", nid, sanitizeDOTID(over))
+			_, _ = fmt.Fprintf(w, "  %s -> %s [style=dotted arrowhead=none];\n", nid, sanitizeDOTID(over))
 		}
 	}
 
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 	return nil
 }
 
@@ -353,7 +353,7 @@ func writeSeqEdge(w io.Writer, from, to, label string, style ast.MessageStyle, a
 	if len(attrs) > 0 {
 		attrStr = " [" + strings.Join(attrs, " ") + "]"
 	}
-	fmt.Fprintf(w, "%s%s -> %s%s;\n", indent, sanitizeDOTID(from), sanitizeDOTID(to), attrStr)
+	_, _ = fmt.Fprintf(w, "%s%s -> %s%s;\n", indent, sanitizeDOTID(from), sanitizeDOTID(to), attrStr)
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -374,13 +374,13 @@ func writeSeqEdge(w io.Writer, from, to, label string, style ast.MessageStyle, a
 //     are emitted as default box nodes so the graph is complete;
 //   - notes become shape=note nodes linked to their state with dotted edges.
 func encodeState(w io.Writer, s *ast.StateDiagram) error {
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintln(w, "  rankdir=TB;")
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintln(w, "  rankdir=TB;")
 	if title := s.Title(); title != "" {
-		fmt.Fprintf(w, "  label=%q;\n", title)
-		fmt.Fprintln(w, "  labelloc=t;")
+		_, _ = fmt.Fprintf(w, "  label=%q;\n", title)
+		_, _ = fmt.Fprintln(w, "  labelloc=t;")
 	}
-	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+	_, _ = fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
 
 	declared := make(map[string]bool)
 	for _, st := range s.States() {
@@ -405,10 +405,10 @@ func encodeState(w io.Writer, s *ast.StateDiagram) error {
 		}
 	}
 	if needStart {
-		fmt.Fprintln(w, `  __start [label="" shape=circle style=filled fillcolor=black width=0.3 fixedsize=true];`)
+		_, _ = fmt.Fprintln(w, `  __start [label="" shape=circle style=filled fillcolor=black width=0.3 fixedsize=true];`)
 	}
 	if needEnd {
-		fmt.Fprintln(w, `  __end [label="" shape=doublecircle width=0.35 fixedsize=true];`)
+		_, _ = fmt.Fprintln(w, `  __end [label="" shape=doublecircle width=0.35 fixedsize=true];`)
 	}
 
 	for _, st := range s.States() {
@@ -430,7 +430,7 @@ func encodeState(w io.Writer, s *ast.StateDiagram) error {
 				continue
 			}
 			seen[mapped] = true
-			fmt.Fprintf(w, "  %s [label=%q shape=box];\n", sanitizeDOTID(mapped), mapped)
+			_, _ = fmt.Fprintf(w, "  %s [label=%q shape=box];\n", sanitizeDOTID(mapped), mapped)
 		}
 	}
 
@@ -441,7 +441,7 @@ func encodeState(w io.Writer, s *ast.StateDiagram) error {
 		if t.Event != "" {
 			attrs = fmt.Sprintf(" [label=%q]", t.Event)
 		}
-		fmt.Fprintf(w, "  %s -> %s%s;\n", sanitizeDOTID(from), sanitizeDOTID(to), attrs)
+		_, _ = fmt.Fprintf(w, "  %s -> %s%s;\n", sanitizeDOTID(from), sanitizeDOTID(to), attrs)
 	}
 
 	for i, n := range s.Notes() {
@@ -449,11 +449,11 @@ func encodeState(w io.Writer, s *ast.StateDiagram) error {
 			continue
 		}
 		nid := fmt.Sprintf("statenote_%d", i)
-		fmt.Fprintf(w, "  %s [label=%q shape=note];\n", nid, n.Text)
-		fmt.Fprintf(w, "  %s -> %s [style=dotted arrowhead=none];\n", nid, sanitizeDOTID(stateEndpointID(n.State, false)))
+		_, _ = fmt.Fprintf(w, "  %s [label=%q shape=note];\n", nid, n.Text)
+		_, _ = fmt.Fprintf(w, "  %s -> %s [style=dotted arrowhead=none];\n", nid, sanitizeDOTID(stateEndpointID(n.State, false)))
 	}
 
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 	return nil
 }
 
@@ -464,12 +464,12 @@ func writeStateNode(w io.Writer, st ast.DiagramState, indent string) {
 		if label == "" {
 			label = st.ID
 		}
-		fmt.Fprintf(w, "%ssubgraph cluster_%s {\n", indent, sanitizeDOTID(st.ID))
-		fmt.Fprintf(w, "%s  label=%q;\n", indent, label)
+		_, _ = fmt.Fprintf(w, "%ssubgraph cluster_%s {\n", indent, sanitizeDOTID(st.ID))
+		_, _ = fmt.Fprintf(w, "%s  label=%q;\n", indent, label)
 		for _, child := range st.Children {
 			writeStateNode(w, child, indent+"  ")
 		}
-		fmt.Fprintf(w, "%s}\n", indent)
+		_, _ = fmt.Fprintf(w, "%s}\n", indent)
 		return
 	}
 
@@ -480,15 +480,15 @@ func writeStateNode(w io.Writer, st ast.DiagramState, indent string) {
 	}
 	switch st.Kind {
 	case ast.StateStart:
-		fmt.Fprintf(w, "%s%s [label=%q shape=circle style=filled fillcolor=black width=0.3 fixedsize=true];\n", indent, id, label)
+		_, _ = fmt.Fprintf(w, "%s%s [label=%q shape=circle style=filled fillcolor=black width=0.3 fixedsize=true];\n", indent, id, label)
 	case ast.StateEnd:
-		fmt.Fprintf(w, "%s%s [label=%q shape=doublecircle width=0.35 fixedsize=true];\n", indent, id, label)
+		_, _ = fmt.Fprintf(w, "%s%s [label=%q shape=doublecircle width=0.35 fixedsize=true];\n", indent, id, label)
 	case ast.StateFork, ast.StateJoin:
-		fmt.Fprintf(w, "%s%s [label=\"\" shape=box style=filled fillcolor=black width=1.2 height=0.15 fixedsize=true];\n", indent, id)
+		_, _ = fmt.Fprintf(w, "%s%s [label=\"\" shape=box style=filled fillcolor=black width=1.2 height=0.15 fixedsize=true];\n", indent, id)
 	case ast.StateChoice:
-		fmt.Fprintf(w, "%s%s [label=%q shape=diamond];\n", indent, id, label)
+		_, _ = fmt.Fprintf(w, "%s%s [label=%q shape=diamond];\n", indent, id, label)
 	default:
-		fmt.Fprintf(w, "%s%s [label=%q shape=box];\n", indent, id, label)
+		_, _ = fmt.Fprintf(w, "%s%s [label=%q shape=box];\n", indent, id, label)
 	}
 }
 
@@ -538,13 +538,13 @@ func stateEndpointID(id string, isSource bool) string {
 //   - entities referenced only by relations (never declared via AddEntity)
 //     are emitted as plain box nodes so the graph is complete.
 func encodeER(w io.Writer, e *ast.ERDiagram) error {
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintln(w, "  rankdir=TB;")
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintln(w, "  rankdir=TB;")
 	if title := e.Title(); title != "" {
-		fmt.Fprintf(w, "  label=%q;\n", title)
-		fmt.Fprintln(w, "  labelloc=t;")
+		_, _ = fmt.Fprintf(w, "  label=%q;\n", title)
+		_, _ = fmt.Fprintln(w, "  labelloc=t;")
 	}
-	fmt.Fprintln(w, "  node [fontname=Helvetica shape=record];")
+	_, _ = fmt.Fprintln(w, "  node [fontname=Helvetica shape=record];")
 
 	declared := make(map[string]bool, len(e.Entities()))
 	for _, en := range e.Entities() {
@@ -554,7 +554,7 @@ func encodeER(w io.Writer, e *ast.ERDiagram) error {
 		for _, attr := range en.Attributes {
 			fields = append(fields, dotRecordEscape(erAttributeText(attr)))
 		}
-		fmt.Fprintf(w, "  %s [label=\"{%s}\"];\n", sanitizeDOTID(en.Name), strings.Join(fields, "|"))
+		_, _ = fmt.Fprintf(w, "  %s [label=\"{%s}\"];\n", sanitizeDOTID(en.Name), strings.Join(fields, "|"))
 	}
 
 	// Emit relation-only entities so every edge endpoint exists as a node.
@@ -565,7 +565,7 @@ func encodeER(w io.Writer, e *ast.ERDiagram) error {
 				continue
 			}
 			seen[name] = true
-			fmt.Fprintf(w, "  %s [label=%q shape=box];\n", sanitizeDOTID(name), name)
+			_, _ = fmt.Fprintf(w, "  %s [label=%q shape=box];\n", sanitizeDOTID(name), name)
 		}
 	}
 
@@ -583,10 +583,10 @@ func encodeER(w io.Writer, e *ast.ERDiagram) error {
 		if !r.Identifying {
 			attrs = append(attrs, "style=dashed")
 		}
-		fmt.Fprintf(w, "  %s -> %s [%s];\n", sanitizeDOTID(r.From), sanitizeDOTID(r.To), strings.Join(attrs, " "))
+		_, _ = fmt.Fprintf(w, "  %s -> %s [%s];\n", sanitizeDOTID(r.From), sanitizeDOTID(r.To), strings.Join(attrs, " "))
 	}
 
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 	return nil
 }
 
@@ -657,13 +657,13 @@ func dotRecordEscape(s string) string {
 //     emitted as plain box nodes so the graph is complete;
 //   - notes become shape=note nodes linked to their class with dotted edges.
 func encodeClass(w io.Writer, c *ast.ClassDiagram) error {
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintln(w, "  rankdir=TB;")
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintln(w, "  rankdir=TB;")
 	if title := c.Title(); title != "" {
-		fmt.Fprintf(w, "  label=%q;\n", title)
-		fmt.Fprintln(w, "  labelloc=t;")
+		_, _ = fmt.Fprintf(w, "  label=%q;\n", title)
+		_, _ = fmt.Fprintln(w, "  labelloc=t;")
 	}
-	fmt.Fprintln(w, "  node [fontname=Helvetica shape=record];")
+	_, _ = fmt.Fprintln(w, "  node [fontname=Helvetica shape=record];")
 
 	declared := make(map[string]bool, len(c.Classes()))
 	for _, cl := range c.Classes() {
@@ -679,7 +679,7 @@ func encodeClass(w io.Writer, c *ast.ClassDiagram) error {
 		if methods := classMembers(cl.Members, true); methods != "" {
 			fields = append(fields, methods)
 		}
-		fmt.Fprintf(w, "  %s [label=\"{%s}\"];\n", sanitizeDOTID(cl.Name), strings.Join(fields, "|"))
+		_, _ = fmt.Fprintf(w, "  %s [label=\"{%s}\"];\n", sanitizeDOTID(cl.Name), strings.Join(fields, "|"))
 	}
 
 	// Emit relation-only classes so every edge endpoint exists as a node.
@@ -690,13 +690,13 @@ func encodeClass(w io.Writer, c *ast.ClassDiagram) error {
 				continue
 			}
 			seen[name] = true
-			fmt.Fprintf(w, "  %s [label=%q shape=box];\n", sanitizeDOTID(name), name)
+			_, _ = fmt.Fprintf(w, "  %s [label=%q shape=box];\n", sanitizeDOTID(name), name)
 		}
 	}
 
 	for _, r := range c.Relations() {
 		attrs := classEdgeAttrs(r)
-		fmt.Fprintf(w, "  %s -> %s [%s];\n", sanitizeDOTID(r.From), sanitizeDOTID(r.To), strings.Join(attrs, " "))
+		_, _ = fmt.Fprintf(w, "  %s -> %s [%s];\n", sanitizeDOTID(r.From), sanitizeDOTID(r.To), strings.Join(attrs, " "))
 	}
 
 	for i, n := range c.Notes() {
@@ -704,11 +704,11 @@ func encodeClass(w io.Writer, c *ast.ClassDiagram) error {
 			continue
 		}
 		nid := fmt.Sprintf("classnote_%d", i)
-		fmt.Fprintf(w, "  %s [label=%q shape=note];\n", nid, n.Text)
-		fmt.Fprintf(w, "  %s -> %s [style=dotted arrowhead=none];\n", nid, sanitizeDOTID(n.Class))
+		_, _ = fmt.Fprintf(w, "  %s [label=%q shape=note];\n", nid, n.Text)
+		_, _ = fmt.Fprintf(w, "  %s -> %s [style=dotted arrowhead=none];\n", nid, sanitizeDOTID(n.Class))
 	}
 
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 	return nil
 }
 
@@ -787,66 +787,66 @@ func classEdgeAttrs(r ast.ClassRelation) []string {
 // encodePie renders pie slices as labelled ellipse nodes. Chart geometry has
 // no DOT equivalent; the slice data is preserved in node labels.
 func encodePie(w io.Writer, p *ast.PieDiagram) error {
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintln(w, "  rankdir=TB;")
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintln(w, "  rankdir=TB;")
 	if title := p.Title(); title != "" {
-		fmt.Fprintf(w, "  label=%q;\n", title)
-		fmt.Fprintln(w, "  labelloc=t;")
+		_, _ = fmt.Fprintf(w, "  label=%q;\n", title)
+		_, _ = fmt.Fprintln(w, "  labelloc=t;")
 	}
-	fmt.Fprintln(w, "  node [fontname=Helvetica shape=ellipse];")
+	_, _ = fmt.Fprintln(w, "  node [fontname=Helvetica shape=ellipse];")
 
 	for i, s := range p.Slices() {
 		label := s.Label
 		if label == "" {
 			label = fmt.Sprintf("slice %d", i+1)
 		}
-		fmt.Fprintf(w, "  slice_%d [label=%q];\n", i,
+		_, _ = fmt.Fprintf(w, "  slice_%d [label=%q];\n", i,
 			fmt.Sprintf("%s: %s", label, strconv.FormatFloat(s.Value, 'f', -1, 64)))
 	}
 
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 	return nil
 }
 
 // encodeQuadrant renders quadrant points as labelled box nodes with their
 // coordinates. Grid geometry has no DOT equivalent.
 func encodeQuadrant(w io.Writer, q *ast.QuadrantDiagram) error {
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintln(w, "  rankdir=TB;")
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintln(w, "  rankdir=TB;")
 	if title := q.Title(); title != "" {
-		fmt.Fprintf(w, "  label=%q;\n", title)
-		fmt.Fprintln(w, "  labelloc=t;")
+		_, _ = fmt.Fprintf(w, "  label=%q;\n", title)
+		_, _ = fmt.Fprintln(w, "  labelloc=t;")
 	}
-	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+	_, _ = fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
 
 	for i, p := range q.Points() {
 		label := p.Name
 		if label == "" {
 			label = fmt.Sprintf("point %d", i+1)
 		}
-		fmt.Fprintf(w, "  point_%d [label=%q];\n", i,
+		_, _ = fmt.Fprintf(w, "  point_%d [label=%q];\n", i,
 			fmt.Sprintf("%s (%s, %s)", label,
 				strconv.FormatFloat(p.X, 'f', -1, 64),
 				strconv.FormatFloat(p.Y, 'f', -1, 64)))
 	}
 
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 	return nil
 }
 
 // encodeMindmap renders the tree as parent -> child edges with one node per
 // mindmap node. Hierarchy is preserved in edges; node labels carry the text.
 func encodeMindmap(w io.Writer, m *ast.MindmapDiagram) error {
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintln(w, "  rankdir=LR;")
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintln(w, "  rankdir=LR;")
 	if title := m.Title(); title != "" {
-		fmt.Fprintf(w, "  label=%q;\n", title)
-		fmt.Fprintln(w, "  labelloc=t;")
+		_, _ = fmt.Fprintf(w, "  label=%q;\n", title)
+		_, _ = fmt.Fprintln(w, "  labelloc=t;")
 	}
-	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+	_, _ = fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
 
 	if m.Root() == nil {
-		fmt.Fprintln(w, "}")
+		_, _ = fmt.Fprintln(w, "}")
 		return nil
 	}
 	n := 0
@@ -863,9 +863,9 @@ func encodeMindmap(w io.Writer, m *ast.MindmapDiagram) error {
 		if label == "" {
 			label = "(empty)"
 		}
-		fmt.Fprintf(w, "  %s [label=%q];\n", id, label)
+		_, _ = fmt.Fprintf(w, "  %s [label=%q];\n", id, label)
 		if parent != "" {
-			fmt.Fprintf(w, "  %s -> %s;\n", parent, id)
+			_, _ = fmt.Fprintf(w, "  %s -> %s;\n", parent, id)
 		}
 		for _, c := range node.Children {
 			emit(c, id)
@@ -873,7 +873,7 @@ func encodeMindmap(w io.Writer, m *ast.MindmapDiagram) error {
 	}
 	emit(m.Root(), "")
 
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 	return nil
 }
 
@@ -885,24 +885,24 @@ func encodeGantt(w io.Writer, g *ast.GanttDiagram) error {
 	if err != nil {
 		return fmt.Errorf("dot: %w", err)
 	}
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintln(w, "  rankdir=LR;")
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintln(w, "  rankdir=LR;")
 	if title := g.Title(); title != "" {
-		fmt.Fprintf(w, "  label=%q;\n", title)
-		fmt.Fprintln(w, "  labelloc=t;")
+		_, _ = fmt.Fprintf(w, "  label=%q;\n", title)
+		_, _ = fmt.Fprintln(w, "  labelloc=t;")
 	}
-	fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
+	_, _ = fmt.Fprintln(w, "  node [fontname=Helvetica shape=box style=rounded];")
 
 	for i, t := range tasks {
 		label := t.Name
 		if label == "" {
 			label = fmt.Sprintf("task %d", i+1)
 		}
-		fmt.Fprintf(w, "  task_%d [label=%q];\n", i,
+		_, _ = fmt.Fprintf(w, "  task_%d [label=%q];\n", i,
 			fmt.Sprintf("%s (%s – %s)", label,
 				t.Start.Format("2006-01-02"), t.End.Format("2006-01-02")))
 	}
 
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 	return nil
 }

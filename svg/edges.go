@@ -64,8 +64,8 @@ func edgeSVG(e *ast.FlowEdge, lr *layoutResult, dir ast.Direction) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(`<path d="%s" fill="none" stroke="%s" stroke-width="%.1f" %s/>`,
-		pointsToPath(pts), strokeColor, sw, dash))
+	_, _ = fmt.Fprintf(&sb, `<path d="%s" fill="none" stroke="%s" stroke-width="%.1f" %s/>`,
+		pointsToPath(pts), strokeColor, sw, dash)
 
 	if e.Style != ast.EdgeNoArrow && len(pts) >= 2 {
 		last := pts[len(pts)-1]

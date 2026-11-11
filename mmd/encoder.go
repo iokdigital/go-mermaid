@@ -47,7 +47,7 @@ func writeTitle(w io.Writer, title string) {
 	if title == "" {
 		return
 	}
-	fmt.Fprintf(w, "---\ntitle: %s\n---\n", title)
+	_, _ = fmt.Fprintf(w, "---\ntitle: %s\n---\n", title)
 }
 
 // truncateLabel truncates a label to 37 chars + ellipsis if longer than 40.
@@ -102,7 +102,7 @@ func encodeFlowchart(w io.Writer, f *ast.FlowchartDiagram) error {
 	if dir == "" {
 		dir = ast.DirectionTB
 	}
-	fmt.Fprintf(w, "flowchart %s\n", dir)
+	_, _ = fmt.Fprintf(w, "flowchart %s\n", dir)
 
 	// Build a set of node IDs that belong to a subgraph for membership tracking.
 	subgraphMember := make(map[string]bool)
@@ -123,9 +123,9 @@ func encodeFlowchart(w io.Writer, f *ast.FlowchartDiagram) error {
 	for _, sg := range f.Subgraphs() {
 		sgID := ast.SanitizeID(sg.ID)
 		if sg.Label != "" {
-			fmt.Fprintf(w, "  subgraph %s [\"%s\"]\n", sgID, escapeFlowText(sg.Label))
+			_, _ = fmt.Fprintf(w, "  subgraph %s [\"%s\"]\n", sgID, escapeFlowText(sg.Label))
 		} else {
-			fmt.Fprintf(w, "  subgraph %s\n", sgID)
+			_, _ = fmt.Fprintf(w, "  subgraph %s\n", sgID)
 		}
 		// Emit node definitions inside the subgraph.
 		nodeByID := make(map[string]*ast.FlowNode, len(f.Nodes()))
@@ -137,7 +137,7 @@ func encodeFlowchart(w io.Writer, f *ast.FlowchartDiagram) error {
 				writeFlowNode(w, n)
 			}
 		}
-		fmt.Fprintln(w, "  end")
+		_, _ = fmt.Fprintln(w, "  end")
 	}
 
 	// Emit edges.
@@ -161,9 +161,9 @@ func writeFlowNode(w io.Writer, n *ast.FlowNode) {
 	open, close := ast.NodeShapeSyntax(n.Shape)
 	// Quote labels that contain special Mermaid characters.
 	if quoted {
-		fmt.Fprintf(w, "  %s%s\"%s\"%s\n", id, open, label, close)
+		_, _ = fmt.Fprintf(w, "  %s%s\"%s\"%s\n", id, open, label, close)
 	} else {
-		fmt.Fprintf(w, "  %s%s%s%s\n", id, open, label, close)
+		_, _ = fmt.Fprintf(w, "  %s%s%s%s\n", id, open, label, close)
 	}
 }
 
@@ -180,21 +180,21 @@ func writeFlowEdge(w io.Writer, e *ast.FlowEdge) {
 
 	if e.Style == ast.EdgeInvisible {
 		// Invisible links carry no label.
-		fmt.Fprintf(w, "  %s ~~~ %s\n", from, to)
+		_, _ = fmt.Fprintf(w, "  %s ~~~ %s\n", from, to)
 		return
 	}
 
 	if e.Label == "" {
-		fmt.Fprintf(w, "  %s %s %s\n", from, string(style), to)
+		_, _ = fmt.Fprintf(w, "  %s %s %s\n", from, string(style), to)
 		return
 	}
 
 	label := escapeFlowText(e.Label)
 	// EdgeNoArrow uses "-- text ---" syntax; all other styles use "|text|".
 	if style == ast.EdgeNoArrow {
-		fmt.Fprintf(w, "  %s -- %s --- %s\n", from, label, to)
+		_, _ = fmt.Fprintf(w, "  %s -- %s --- %s\n", from, label, to)
 	} else {
-		fmt.Fprintf(w, "  %s %s|%s| %s\n", from, string(style), label, to)
+		_, _ = fmt.Fprintf(w, "  %s %s|%s| %s\n", from, string(style), label, to)
 	}
 }
 
@@ -215,9 +215,9 @@ func needsQuote(s string) bool {
 
 func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
 	writeTitle(w, s.Title())
-	fmt.Fprintln(w, "sequenceDiagram")
+	_, _ = fmt.Fprintln(w, "sequenceDiagram")
 	if s.Autonumber() {
-		fmt.Fprintln(w, "  autonumber")
+		_, _ = fmt.Fprintln(w, "  autonumber")
 	}
 	for _, p := range s.Participants() {
 		alias := p.Alias
@@ -228,34 +228,34 @@ func encodeSequence(w io.Writer, s *ast.SequenceDiagram) error {
 			kind = ast.ParticipantBox
 		}
 		if p.Label != "" && p.Label != p.Alias {
-			fmt.Fprintf(w, "  %s %s as %s\n", string(kind), alias, p.Label)
+			_, _ = fmt.Fprintf(w, "  %s %s as %s\n", string(kind), alias, p.Label)
 		} else {
-			fmt.Fprintf(w, "  %s %s\n", string(kind), alias)
+			_, _ = fmt.Fprintf(w, "  %s %s\n", string(kind), alias)
 		}
 	}
 	encodeSeqMessages(w, s.Messages(), "  ")
 
 	for _, loop := range s.Loops() {
-		fmt.Fprintf(w, "  loop %s\n", loop.Label)
+		_, _ = fmt.Fprintf(w, "  loop %s\n", loop.Label)
 		encodeSeqMessages(w, loop.Messages, "    ")
-		fmt.Fprintln(w, "  end")
+		_, _ = fmt.Fprintln(w, "  end")
 	}
 	for _, alt := range s.Alts() {
-		fmt.Fprintf(w, "  alt %s\n", alt.Condition)
+		_, _ = fmt.Fprintf(w, "  alt %s\n", alt.Condition)
 		encodeSeqMessages(w, alt.Messages, "    ")
 		if len(alt.Else) > 0 {
-			fmt.Fprintln(w, "  else")
+			_, _ = fmt.Fprintln(w, "  else")
 			encodeSeqMessages(w, alt.Else, "    ")
 		}
-		fmt.Fprintln(w, "  end")
+		_, _ = fmt.Fprintln(w, "  end")
 	}
 	for _, n := range s.Notes() {
 		switch len(n.Over) {
 		case 0:
 		case 1:
-			fmt.Fprintf(w, "  Note over %s: %s\n", n.Over[0], n.Text)
+			_, _ = fmt.Fprintf(w, "  Note over %s: %s\n", n.Over[0], n.Text)
 		default:
-			fmt.Fprintf(w, "  Note over %s: %s\n", strings.Join(n.Over, ","), n.Text)
+			_, _ = fmt.Fprintf(w, "  Note over %s: %s\n", strings.Join(n.Over, ","), n.Text)
 		}
 	}
 	return nil
@@ -275,7 +275,7 @@ func encodeSeqMessages(w io.Writer, msgs []ast.SeqMessage, indent string) {
 		} else if m.Deactivate {
 			target = target + "-"
 		}
-		fmt.Fprintf(w, "%s%s%s%s: %s\n", indent, m.From, string(style), target, m.Text)
+		_, _ = fmt.Fprintf(w, "%s%s%s%s: %s\n", indent, m.From, string(style), target, m.Text)
 	}
 }
 
@@ -285,7 +285,7 @@ func encodeSeqMessages(w io.Writer, msgs []ast.SeqMessage, indent string) {
 
 func encodeState(w io.Writer, s *ast.StateDiagram) error {
 	writeTitle(w, s.Title())
-	fmt.Fprintln(w, "stateDiagram-v2")
+	_, _ = fmt.Fprintln(w, "stateDiagram-v2")
 
 	for _, st := range s.States() {
 		encodeStateNode(w, st, "  ")
@@ -294,13 +294,13 @@ func encodeState(w io.Writer, s *ast.StateDiagram) error {
 		from := stateRef(t.From)
 		to := stateRef(t.To)
 		if t.Event != "" {
-			fmt.Fprintf(w, "  %s --> %s : %s\n", from, to, t.Event)
+			_, _ = fmt.Fprintf(w, "  %s --> %s : %s\n", from, to, t.Event)
 		} else {
-			fmt.Fprintf(w, "  %s --> %s\n", from, to)
+			_, _ = fmt.Fprintf(w, "  %s --> %s\n", from, to)
 		}
 	}
 	for _, n := range s.Notes() {
-		fmt.Fprintf(w, "  note right of %s\n    %s\n  end note\n", n.State, n.Text)
+		_, _ = fmt.Fprintf(w, "  note right of %s\n    %s\n  end note\n", n.State, n.Text)
 	}
 	return nil
 }
@@ -311,25 +311,25 @@ func encodeStateNode(w io.Writer, st ast.DiagramState, indent string) {
 		// [*] nodes are referenced in transitions; no separate declaration needed.
 		return
 	case ast.StateFork:
-		fmt.Fprintf(w, "%sstate %s <<fork>>\n", indent, st.ID)
+		_, _ = fmt.Fprintf(w, "%sstate %s <<fork>>\n", indent, st.ID)
 	case ast.StateJoin:
-		fmt.Fprintf(w, "%sstate %s <<join>>\n", indent, st.ID)
+		_, _ = fmt.Fprintf(w, "%sstate %s <<join>>\n", indent, st.ID)
 	case ast.StateChoice:
-		fmt.Fprintf(w, "%sstate %s <<choice>>\n", indent, st.ID)
+		_, _ = fmt.Fprintf(w, "%sstate %s <<choice>>\n", indent, st.ID)
 	default:
 		if len(st.Children) == 0 {
 			if st.Label != "" && st.Label != st.ID {
-				fmt.Fprintf(w, "%sstate \"%s\" as %s\n", indent, st.Label, st.ID)
+				_, _ = fmt.Fprintf(w, "%sstate \"%s\" as %s\n", indent, st.Label, st.ID)
 			}
 			// Simple states with no label alias are implied by transition references.
 			return
 		}
 		// Composite state.
-		fmt.Fprintf(w, "%sstate %s {\n", indent, st.ID)
+		_, _ = fmt.Fprintf(w, "%sstate %s {\n", indent, st.ID)
 		for _, child := range st.Children {
 			encodeStateNode(w, child, indent+"  ")
 		}
-		fmt.Fprintf(w, "%s}\n", indent)
+		_, _ = fmt.Fprintf(w, "%s}\n", indent)
 	}
 }
 
@@ -347,15 +347,15 @@ func stateRef(id string) string {
 
 func encodeER(w io.Writer, e *ast.ERDiagram) error {
 	writeTitle(w, e.Title())
-	fmt.Fprintln(w, "erDiagram")
+	_, _ = fmt.Fprintln(w, "erDiagram")
 
 	for _, en := range e.Entities() {
 		name := ast.SanitizeID(en.Name)
 		if len(en.Attributes) == 0 {
-			fmt.Fprintf(w, "  %s\n", name)
+			_, _ = fmt.Fprintf(w, "  %s\n", name)
 			continue
 		}
-		fmt.Fprintf(w, "  %s {\n", name)
+		_, _ = fmt.Fprintf(w, "  %s {\n", name)
 		for _, attr := range en.Attributes {
 			// Attribute names are bare words in the ER grammar: spaces and
 			// quotes break parsing, so sanitize to [A-Za-z0-9_-].
@@ -368,9 +368,9 @@ func encodeER(w io.Writer, e *ast.ERDiagram) error {
 			if attr.Comment != "" {
 				comment = " \"" + strings.ReplaceAll(attr.Comment, `"`, "#quot;") + "\""
 			}
-			fmt.Fprintf(w, "    %s %s%s%s\n", attr.DataType, ast.SanitizeID(attr.Name), keys, comment)
+			_, _ = fmt.Fprintf(w, "    %s %s%s%s\n", attr.DataType, ast.SanitizeID(attr.Name), keys, comment)
 		}
-		fmt.Fprintln(w, "  }")
+		_, _ = fmt.Fprintln(w, "  }")
 	}
 
 	for _, r := range e.Relations() {
@@ -389,7 +389,7 @@ func encodeER(w io.Writer, e *ast.ERDiagram) error {
 		if strings.ContainsAny(label, "&\":") {
 			label = `"` + strings.ReplaceAll(label, `"`, "#quot;") + `"`
 		}
-		fmt.Fprintf(w, "  %s %s%s%s %s : %s\n",
+		_, _ = fmt.Fprintf(w, "  %s %s%s%s %s : %s\n",
 			ast.SanitizeID(r.From), string(r.FromCard), line, right, ast.SanitizeID(r.To), label)
 	}
 	return nil
@@ -401,18 +401,18 @@ func encodeER(w io.Writer, e *ast.ERDiagram) error {
 
 func encodeClass(w io.Writer, c *ast.ClassDiagram) error {
 	writeTitle(w, c.Title())
-	fmt.Fprintln(w, "classDiagram")
+	_, _ = fmt.Fprintln(w, "classDiagram")
 
 	for _, cl := range c.Classes() {
 		if cl.Annotation != "" {
-			fmt.Fprintf(w, "  class %s {\n    %s\n", cl.Name, cl.Annotation)
+			_, _ = fmt.Fprintf(w, "  class %s {\n    %s\n", cl.Name, cl.Annotation)
 		} else {
-			fmt.Fprintf(w, "  class %s {\n", cl.Name)
+			_, _ = fmt.Fprintf(w, "  class %s {\n", cl.Name)
 		}
 		for _, m := range cl.Members {
-			fmt.Fprintf(w, "    %s\n", formatClassMember(m))
+			_, _ = fmt.Fprintf(w, "    %s\n", formatClassMember(m))
 		}
-		fmt.Fprintln(w, "  }")
+		_, _ = fmt.Fprintln(w, "  }")
 	}
 
 	for _, r := range c.Relations() {
@@ -428,13 +428,13 @@ func encodeClass(w io.Writer, c *ast.ClassDiagram) error {
 		if r.Label != "" {
 			label = " : " + r.Label
 		}
-		fmt.Fprintf(w, "  %s%s %s%s %s%s\n",
+		_, _ = fmt.Fprintf(w, "  %s%s %s%s %s%s\n",
 			r.From, cardFrom, string(r.Kind), cardTo, r.To, label)
 	}
 
 	for _, n := range c.Notes() {
 		// Notes are "..."-quoted: escape embedded quotes as #quot;.
-		fmt.Fprintf(w, "  note for %s \"%s\"\n", n.Class, strings.ReplaceAll(n.Text, `"`, "#quot;"))
+		_, _ = fmt.Fprintf(w, "  note for %s \"%s\"\n", n.Class, strings.ReplaceAll(n.Text, `"`, "#quot;"))
 	}
 	return nil
 }
@@ -465,7 +465,7 @@ func formatClassMember(m ast.ClassMember) string {
 
 func encodePie(w io.Writer, p *ast.PieDiagram) error {
 	writeTitle(w, p.Title())
-	fmt.Fprintln(w, "pie")
+	_, _ = fmt.Fprintln(w, "pie")
 
 	for _, s := range p.Slices() {
 		if math.IsNaN(s.Value) || math.IsInf(s.Value, 0) {
@@ -477,7 +477,7 @@ func encodePie(w io.Writer, p *ast.PieDiagram) error {
 		// Labels are always "..."-quoted: bare words fail parsing, and ":",
 		// "|", "&" need no escaping inside quotes. Embedded quotes end the
 		// label, so they become #quot; (verified against Pele/Mermaid 12.1.0).
-		fmt.Fprintf(w, "  \"%s\" : %s\n",
+		_, _ = fmt.Fprintf(w, "  \"%s\" : %s\n",
 			strings.ReplaceAll(s.Label, `"`, "#quot;"),
 			strconv.FormatFloat(s.Value, 'f', -1, 64))
 	}
@@ -497,25 +497,25 @@ func escapeQuadrantText(s string) string {
 
 func encodeQuadrant(w io.Writer, q *ast.QuadrantDiagram) error {
 	writeTitle(w, q.Title())
-	fmt.Fprintln(w, "quadrantChart")
+	_, _ = fmt.Fprintln(w, "quadrantChart")
 
 	if x := q.XAxis(); x[0] != "" || x[1] != "" {
 		if x[1] != "" {
-			fmt.Fprintf(w, "  x-axis %s --> %s\n", escapeQuadrantText(x[0]), escapeQuadrantText(x[1]))
+			_, _ = fmt.Fprintf(w, "  x-axis %s --> %s\n", escapeQuadrantText(x[0]), escapeQuadrantText(x[1]))
 		} else {
-			fmt.Fprintf(w, "  x-axis %s\n", escapeQuadrantText(x[0]))
+			_, _ = fmt.Fprintf(w, "  x-axis %s\n", escapeQuadrantText(x[0]))
 		}
 	}
 	if y := q.YAxis(); y[0] != "" || y[1] != "" {
 		if y[1] != "" {
-			fmt.Fprintf(w, "  y-axis %s --> %s\n", escapeQuadrantText(y[0]), escapeQuadrantText(y[1]))
+			_, _ = fmt.Fprintf(w, "  y-axis %s --> %s\n", escapeQuadrantText(y[0]), escapeQuadrantText(y[1]))
 		} else {
-			fmt.Fprintf(w, "  y-axis %s\n", escapeQuadrantText(y[0]))
+			_, _ = fmt.Fprintf(w, "  y-axis %s\n", escapeQuadrantText(y[0]))
 		}
 	}
 	for i, label := range q.Quadrants() {
 		if label != "" {
-			fmt.Fprintf(w, "  quadrant-%d %s\n", i+1, escapeQuadrantText(label))
+			_, _ = fmt.Fprintf(w, "  quadrant-%d %s\n", i+1, escapeQuadrantText(label))
 		}
 	}
 
@@ -532,7 +532,7 @@ func encodeQuadrant(w io.Writer, q *ast.QuadrantDiagram) error {
 		if strings.ContainsAny(name, ":\"") {
 			name = `"` + strings.ReplaceAll(name, `"`, "#quot;") + `"`
 		}
-		fmt.Fprintf(w, "  %s: [%s, %s]\n", name,
+		_, _ = fmt.Fprintf(w, "  %s: [%s, %s]\n", name,
 			strconv.FormatFloat(p.X, 'f', -1, 64),
 			strconv.FormatFloat(p.Y, 'f', -1, 64))
 	}
@@ -575,7 +575,7 @@ func escapeMindLabel(s string) string {
 
 func encodeMindmap(w io.Writer, m *ast.MindmapDiagram) error {
 	writeTitle(w, m.Title())
-	fmt.Fprintln(w, "mindmap")
+	_, _ = fmt.Fprintln(w, "mindmap")
 	if m.Root() == nil {
 		return nil
 	}
@@ -645,14 +645,14 @@ func encodeMindNode(w io.Writer, n *ast.MindNode, depth int, st *mindEncodeState
 	needsDelim := n.ID != "" || (n.Shape != "" && n.Shape != ast.ShapeRoundedRect) ||
 		strings.ContainsAny(label, "()[]{}")
 	if !needsDelim {
-		fmt.Fprintf(w, "%s%s\n", indent, label)
+		_, _ = fmt.Fprintf(w, "%s%s\n", indent, label)
 	} else {
 		id := n.ID
 		if id == "" {
 			id = st.autoID()
 		}
 		open, close := mindShapeSyntax(n.Shape)
-		fmt.Fprintf(w, "%s%s%s%s%s\n", indent, ast.SanitizeID(id), open, escapeMindLabel(label), close)
+		_, _ = fmt.Fprintf(w, "%s%s%s%s%s\n", indent, ast.SanitizeID(id), open, escapeMindLabel(label), close)
 	}
 	for _, c := range n.Children {
 		encodeMindNode(w, c, depth+1, st)
@@ -670,19 +670,19 @@ func encodeGantt(w io.Writer, g *ast.GanttDiagram) error {
 		return fmt.Errorf("mmd: %w", err)
 	}
 	writeTitle(w, g.Title())
-	fmt.Fprintln(w, "gantt")
+	_, _ = fmt.Fprintln(w, "gantt")
 
 	if f := g.DateFormat(); f != "" {
-		fmt.Fprintf(w, "  dateFormat %s\n", f)
+		_, _ = fmt.Fprintf(w, "  dateFormat %s\n", f)
 	}
 	if f := g.AxisFormat(); f != "" {
-		fmt.Fprintf(w, "  axisFormat %s\n", f)
+		_, _ = fmt.Fprintf(w, "  axisFormat %s\n", f)
 	}
 	for _, t := range g.Tasks() {
 		encodeGanttTask(w, t, "  ")
 	}
 	for _, s := range g.Sections() {
-		fmt.Fprintf(w, "  section %s\n", oneLine(s.Name))
+		_, _ = fmt.Fprintf(w, "  section %s\n", oneLine(s.Name))
 		for _, t := range s.Tasks {
 			encodeGanttTask(w, t, "    ")
 		}
@@ -705,5 +705,5 @@ func encodeGanttTask(w io.Writer, t ast.GanttTask, indent string) {
 		parts = append(parts, t.ID)
 	}
 	parts = append(parts, strings.TrimSpace(t.Start), strings.TrimSpace(t.End))
-	fmt.Fprintf(w, "%s%s : %s\n", indent, oneLine(t.Name), strings.Join(parts, ", "))
+	_, _ = fmt.Fprintf(w, "%s%s : %s\n", indent, oneLine(t.Name), strings.Join(parts, ", "))
 }

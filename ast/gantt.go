@@ -213,7 +213,7 @@ func translateGanttDateFormat(format string) (layout string, hasYear bool, err e
 	i := 0
 	for i < len(format) {
 		c := format[i]
-		if !(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') {
+		if (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') {
 			b.WriteByte(c)
 			i++
 			continue

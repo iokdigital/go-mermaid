@@ -216,15 +216,6 @@ func encodeMindmap(w io.Writer, d *ast.MindmapDiagram, opts diagram.RenderOption
 	if padding <= 0 {
 		padding = 40
 	}
-	maxW := float64(opts.SVGMaxWidth)
-	if maxW <= 0 {
-		maxW = 8000
-	}
-	maxH := float64(opts.SVGMaxHeight)
-	if maxH <= 0 {
-		maxH = 6000
-	}
-
 	var sb strings.Builder
 	if d.Root() == nil {
 		writeSVGHeader(&sb, padding*2+100, padding*2+60, opts, d.Title())
@@ -250,14 +241,10 @@ func encodeMindmap(w io.Writer, d *ast.MindmapDiagram, opts diagram.RenderOption
 	}
 	walk(d.Root(), 0)
 
-	gnodes := make([]gNode, 0, len(flat))
 	gedges := make([]gEdge, 0, len(flat))
 	idOf := make(map[*ast.MindNode]string, len(flat))
 	for _, fn := range flat {
-		id := fmt.Sprintf("m%d", fn.idx)
-		idOf[fn.node] = id
-		nw, nh := mindNodeSize(fn.node.Label)
-		gnodes = append(gnodes, gNode{ID: id, W: nw, H: nh})
+		idOf[fn.node] = fmt.Sprintf("m%d", fn.idx)
 	}
 	linked := make(map[*ast.MindNode]bool)
 	var link func(n *ast.MindNode)

@@ -181,6 +181,8 @@ func edgeCase() []struct {
 	gg := ast.NewGantt(`Sprint "42": plan & <ship>`)
 	gg.SetDateFormat("YYYY-MM-DD")
 	gg.SetAxisFormat("%m/%d")
+	gg.SetExcludes("weekends, 2014-01-10")
+	gg.SetTodayMarker("stroke-width:5px,stroke:#0f0,opacity:0.5")
 	gs := ast.NewGanttSection("Phase 1: build & test")
 	gs.AddTask(ast.GanttTask{Name: `Kick "off": now?`, ID: "k", Start: "2014-01-01", End: "3d"})
 	gs.AddTask(ast.GanttTask{Name: "Build [core]", Start: "after k", End: "until m"})

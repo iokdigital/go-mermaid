@@ -1,6 +1,8 @@
 package svg_test
 
 import (
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -49,6 +51,61 @@ func TestMindmap_TitleLabelsAndShapes(t *testing.T) {
 	}
 	if !strings.Contains(out, "<polygon") {
 		t.Error("expected polygon for hexagon node")
+	}
+}
+
+// svgWidth parses the width attribute from the SVG header.
+func svgWidth(t *testing.T, svgOut string) float64 {
+	t.Helper()
+	idx := strings.Index(svgOut, `width="`)
+	if idx < 0 {
+		t.Fatal("no width attribute in SVG output")
+	}
+	rest := svgOut[idx+len(`width="`):]
+	end := strings.Index(rest, `"`)
+	if end < 0 {
+		t.Fatal("unterminated width attribute")
+	}
+	var w float64
+	if _, err := fmt.Sscanf(rest[:end], "%f", &w); err != nil {
+		t.Fatalf("bad width %q: %v", rest[:end], err)
+	}
+	return w
+}
+
+func TestMindmap_RootCentered(t *testing.T) {
+	out := encode2(t, mindmapFixture())
+	rx := textAttr(t, out, "root", "x") // root center ≈ half the SVG width
+	w := svgWidth(t, out)
+	if math.Abs(rx-w/2) > 5 {
+		t.Errorf("root x=%.1f not centered in width %.0f", rx, w)
+	}
+}
+
+func TestMindmap_BalancedSides(t *testing.T) {
+	out := encode2(t, mindmapFixture())
+	// Alpha subtree right of root, Beta subtree left of root (alternation).
+	if !(textAttr(t, out, "Alpha", "x") > textAttr(t, out, "root", "x")) {
+		t.Error("first child should lay out right of root")
+	}
+	if !(textAttr(t, out, "Beta", "x") < textAttr(t, out, "root", "x")) {
+		t.Error("second child should lay out left of root")
+	}
+}
+
+func TestMindmap_ElbowEdges(t *testing.T) {
+	out := encode2(t, mindmapFixture())
+	// Elbow connectors: each edge path is M x,y H mid V y2 H x2 — the path
+	// data inside the edges group must contain H/V segments (straight
+	// diagonals are pure M/L).
+	start := strings.Index(out, `id="mindmap-edges"`)
+	if start < 0 {
+		t.Fatal("no edges group")
+	}
+	end := strings.Index(out[start:], "</g>")
+	paths := out[start : start+end]
+	if !strings.Contains(paths, "H") || !strings.Contains(paths, "V") {
+		t.Errorf("expected elbow connectors with H/V segments in edge paths:\n%s", paths)
 	}
 }
 

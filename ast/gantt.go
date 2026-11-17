@@ -13,11 +13,16 @@ import (
 // GanttDiagram represents a Mermaid gantt chart: sections of tasks with
 // dates, durations, and after/until dependencies.
 type GanttDiagram struct {
-	title      string
-	dateFormat string
-	axisFormat string
-	sections   []GanttSection
-	tasks      []GanttTask // unsectioned tasks, rendered first
+	title       string
+	dateFormat  string
+	axisFormat  string
+	excludes    string // raw excludes line ("" = none)
+	todayMarker string // raw todayMarker style string ("" = none)
+	sections    []GanttSection
+	tasks       []GanttTask // unsectioned tasks, rendered first
+
+	excludesWeekends bool
+	excludesDates    []string // raw date strings, parsed lazily with the diagram format
 }
 
 // GanttSection groups tasks under a named header.
@@ -76,6 +81,50 @@ func (g *GanttDiagram) SetAxisFormat(f string) *GanttDiagram {
 	g.axisFormat = f
 	return g
 }
+
+// SetExcludes sets the excludes line: the "weekends" keyword and/or a
+// comma-separated list of dates in the diagram's dateFormat (e.g.
+// "weekends, 2014-01-10"). Excluded days consume no task duration (see
+// Resolve). The raw line is preserved for MMD passthrough.
+func (g *GanttDiagram) SetExcludes(s string) *GanttDiagram {
+	g.excludes = strings.TrimSpace(s)
+	g.excludesWeekends = false
+	g.excludesDates = nil
+	for _, part := range strings.Split(g.excludes, ",") {
+		p := strings.TrimSpace(part)
+		switch strings.ToLower(p) {
+		case "":
+			continue
+		case "weekends":
+			g.excludesWeekends = true
+		default:
+			g.excludesDates = append(g.excludesDates, p)
+		}
+	}
+	return g
+}
+
+// Excludes returns the raw excludes line ("" = none).
+func (g *GanttDiagram) Excludes() string { return g.excludes }
+
+// ExcludesWeekends reports whether the excludes line includes "weekends".
+func (g *GanttDiagram) ExcludesWeekends() bool { return g.excludesWeekends }
+
+// ExcludesDates returns the custom excluded dates as raw strings in the
+// diagram's dateFormat.
+func (g *GanttDiagram) ExcludesDates() []string { return g.excludesDates }
+
+// SetTodayMarker sets the todayMarker line (e.g.
+// "stroke-width:5px,stroke:#0f0,opacity:0.5"). The SVG renderer draws a
+// vertical line at time.Now() when set; the style attributes are preserved
+// verbatim for MMD passthrough.
+func (g *GanttDiagram) SetTodayMarker(m string) *GanttDiagram {
+	g.todayMarker = m
+	return g
+}
+
+// TodayMarker returns the raw todayMarker style string ("" = none).
+func (g *GanttDiagram) TodayMarker() string { return g.todayMarker }
 
 func (g *GanttDiagram) Sections() []GanttSection { return g.sections }
 func (g *GanttDiagram) Tasks() []GanttTask       { return g.tasks }
@@ -137,9 +186,76 @@ func ParseGanttDuration(s string) (time.Duration, error) {
 	}
 }
 
+// ganttDateTokens maps moment-style dateFormat tokens to Go layout tokens,
+// longest match first. Letter runs that are not in this table make the
+// format unsupported; non-letter characters pass through as literals.
+var ganttDateTokens = []struct {
+	tok, layout string
+}{
+	{"YYYY", "2006"},
+	{"YY", "06"},
+	{"MMM", "Jan"},
+	{"MM", "01"},
+	{"DD", "02"},
+	{"D", "2"},
+	{"HH", "15"},
+	{"H", "3"},
+	{"mm", "04"},
+	{"ss", "05"},
+}
+
+// translateGanttDateFormat converts a Mermaid dateFormat to a Go layout.
+// It returns hasYear=false for date-only formats (no YYYY/YY), which resolve
+// in the current year.
+func translateGanttDateFormat(format string) (layout string, hasYear bool, err error) {
+	var b strings.Builder
+	hasYear = false
+	i := 0
+	for i < len(format) {
+		c := format[i]
+		if (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') {
+			b.WriteByte(c)
+			i++
+			continue
+		}
+		j := i
+		for j < len(format) && (format[j] >= 'A' && format[j] <= 'Z' || format[j] >= 'a' && format[j] <= 'z') {
+			j++
+		}
+		run := format[i:j]
+		switch run {
+		case "X":
+			return "", false, fmt.Errorf("unsupported dateFormat %q (X must be the whole format)", format)
+		case "x":
+			return "", false, fmt.Errorf("unsupported dateFormat %q (x must be the whole format)", format)
+		}
+		for len(run) > 0 {
+			found := false
+			for _, t := range ganttDateTokens {
+				if strings.HasPrefix(run, t.tok) {
+					b.WriteString(t.layout)
+					run = run[len(t.tok):]
+					if t.tok == "YYYY" || t.tok == "YY" {
+						hasYear = true
+					}
+					found = true
+					break
+				}
+			}
+			if !found {
+				return "", false, fmt.Errorf("unsupported dateFormat %q (want tokens YYYY YY MMM MM DD D HH H mm ss, or X/x epoch)", format)
+			}
+		}
+		i = j
+	}
+	return b.String(), hasYear, nil
+}
+
 // ParseGanttDate parses a date in the given dateFormat. Supported formats:
-// "" and "YYYY-MM-DD", "YYYY-MM-DD HH:mm", "MM-DD" (current year), "X"
-// (unix epoch seconds). Anything else is rejected.
+// "" and "YYYY-MM-DD"; "YYYY-MM-DD HH:mm"; "MM-DD" (current year); "X"
+// (unix epoch seconds); "x" (unix epoch milliseconds); and combinations of
+// the tokens YYYY YY MMM MM DD D HH H mm ss (date-only formats resolve in
+// the current year). Anything else is rejected.
 func ParseGanttDate(s, format string) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	switch format {
@@ -147,22 +263,110 @@ func ParseGanttDate(s, format string) (time.Time, error) {
 		return time.Parse("2006-01-02", s)
 	case "YYYY-MM-DD HH:mm":
 		return time.Parse("2006-01-02 15:04", s)
-	case "MM-DD":
-		t, err := time.Parse("01-02", s)
-		if err != nil {
-			return time.Time{}, err
-		}
-		now := time.Now()
-		return time.Date(now.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local), nil
 	case "X":
 		secs, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
 			return time.Time{}, fmt.Errorf("invalid epoch %q", s)
 		}
 		return time.Unix(secs, 0), nil
-	default:
-		return time.Time{}, fmt.Errorf("unsupported dateFormat %q (want YYYY-MM-DD, YYYY-MM-DD HH:mm, MM-DD, or X)", format)
+	case "x":
+		millis, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("invalid epoch %q", s)
+		}
+		return time.UnixMilli(millis), nil
 	}
+	layout, hasYear, err := translateGanttDateFormat(format)
+	if err != nil {
+		return time.Time{}, err
+	}
+	t, err := time.Parse(layout, s)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if !hasYear {
+		now := time.Now()
+		return time.Date(now.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.Local), nil
+	}
+	return t, nil
+}
+
+// addGanttDuration adds dur to start, skipping excluded calendar days.
+// The start day always consumes (even if it is itself excluded); entering an
+// excluded day consumes no duration. Day/week durations step by whole
+// calendar days, with a fractional remainder consuming pro-rata from the
+// start of the next non-excluded day; sub-day (s/m/h) durations flow
+// continuously within non-excluded days. With no excluded predicate this is
+// plain addition (semantics pinned vs Pele; see
+// docs/plans/2026-10-28-gantt-excludes-markers.md).
+func addGanttDuration(start time.Time, dur time.Duration, excluded func(time.Time) bool, dayUnit bool) time.Time {
+	if excluded == nil {
+		return start.Add(dur)
+	}
+	if !dayUnit {
+		// Continuous (s/m/h) durations.
+		cur := start
+		remaining := dur
+		for skipped := 0; remaining > 0; {
+			next := ganttDayBoundary(cur).AddDate(0, 0, 1)
+			if excluded(next) {
+				cur = next
+				skipped++
+				if skipped > 36525 { // 100 years of consecutive excludes: give up
+					return cur.Add(remaining)
+				}
+				continue
+			}
+			skipped = 0
+			span := next.Sub(cur)
+			take := span
+			if remaining < take {
+				take = remaining
+			}
+			cur = cur.Add(take)
+			remaining -= take
+		}
+		return cur
+	}
+	// Day/week durations: whole days step by calendar day.
+	whole := dur.Truncate(24 * time.Hour)
+	frac := dur - whole
+	offset := start.Sub(ganttDayBoundary(start))
+	cur := start
+	for skipped := 0; whole > 0; {
+		next := ganttDayBoundary(cur).AddDate(0, 0, 1)
+		if excluded(next) {
+			cur = next
+			skipped++
+			if skipped > 36525 {
+				return next.Add(offset).Add(whole).Add(frac)
+			}
+			continue
+		}
+		skipped = 0
+		cur = next
+		whole -= 24 * time.Hour
+	}
+	if frac > 0 {
+		for skipped := 0; ; {
+			next := ganttDayBoundary(cur).AddDate(0, 0, 1)
+			if excluded(next) {
+				cur = next
+				skipped++
+				if skipped > 36525 {
+					return next.Add(frac)
+				}
+				continue
+			}
+			return next.Add(frac)
+		}
+	}
+	return cur.Add(offset)
+}
+
+// ganttDayBoundary returns midnight of t's day.
+func ganttDayBoundary(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
 // Resolve computes concrete start/end times for every task, following
@@ -216,6 +420,11 @@ func (g *GanttDiagram) Resolve() ([]ResolvedGanttTask, error) {
 	ends := make([]time.Time, len(all))
 	done := make([]bool, len(all))
 
+	excluded, err := g.buildExcludes()
+	if err != nil {
+		return nil, err
+	}
+
 	// Iterative resolution handles forward references; each pass must settle
 	// at least one task or the remainder is unresolvable (cycle/unknown ref).
 	for settled := 0; settled < len(all); {
@@ -224,7 +433,7 @@ func (g *GanttDiagram) Resolve() ([]ResolvedGanttTask, error) {
 			if done[i] {
 				continue
 			}
-			s, e, ok, err := resolveTask(l.task, starts, ends, done, byID, g.dateFormat)
+			s, e, ok, err := resolveTask(l.task, starts, ends, done, byID, g.dateFormat, excluded)
 			if err != nil {
 				return nil, err
 			}
@@ -270,9 +479,40 @@ func unresolved(done []bool) int {
 	return 0
 }
 
+// buildExcludes validates the custom excluded dates against the diagram's
+// dateFormat and returns the exclusion predicate (nil when nothing is
+// excluded).
+func (g *GanttDiagram) buildExcludes() (func(time.Time) bool, error) {
+	if !g.excludesWeekends && len(g.excludesDates) == 0 {
+		return nil, nil
+	}
+	var dates []time.Time
+	for _, raw := range g.excludesDates {
+		t, err := ParseGanttDate(raw, g.dateFormat)
+		if err != nil {
+			return nil, fmt.Errorf("gantt: invalid excludes date %q: %v", raw, err)
+		}
+		dates = append(dates, t)
+	}
+	return func(t time.Time) bool {
+		if g.excludesWeekends {
+			switch t.Weekday() {
+			case time.Saturday, time.Sunday:
+				return true
+			}
+		}
+		for _, d := range dates {
+			if t.Year() == d.Year() && t.Month() == d.Month() && t.Day() == d.Day() {
+				return true
+			}
+		}
+		return false
+	}, nil
+}
+
 // resolveTask resolves one task. ok=false means a dependency is not settled
 // yet (retry in a later pass).
-func resolveTask(t GanttTask, starts, ends []time.Time, done []bool, byID map[string]int, format string) (s, e time.Time, ok bool, err error) {
+func resolveTask(t GanttTask, starts, ends []time.Time, done []bool, byID map[string]int, format string, excluded func(time.Time) bool) (s, e time.Time, ok bool, err error) {
 	startStr := strings.TrimSpace(t.Start)
 	if rest, found := strings.CutPrefix(startStr, "after "); found {
 		ref := strings.TrimSpace(rest)
@@ -309,7 +549,9 @@ func resolveTask(t GanttTask, starts, ends []time.Time, done []bool, byID map[st
 		// until ends at the referenced task's start (verified vs Pele).
 		e = starts[j]
 	} else if d, derr := ParseGanttDuration(endStr); derr == nil {
-		e = s.Add(d)
+		unit := strings.TrimSpace(endStr)
+		dayUnit := strings.HasSuffix(unit, "d") || strings.HasSuffix(unit, "w")
+		e = addGanttDuration(s, d, excluded, dayUnit)
 	} else {
 		var perr error
 		e, perr = ParseGanttDate(endStr, format)

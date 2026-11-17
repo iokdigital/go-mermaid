@@ -406,6 +406,15 @@ func TestGanttUngroupedAndMinimal(t *testing.T) {
 	assertGolden(t, encode(t, g))
 }
 
+func TestGanttExcludes(t *testing.T) {
+	g := ast.NewGantt("P")
+	g.SetDateFormat("YYYY-MM-DD")
+	g.SetExcludes("weekends, 2014-01-10")
+	g.SetTodayMarker("stroke-width:5px,stroke:#0f0,opacity:0.5")
+	g.AddTask(ast.GanttTask{Name: "A", Start: "2014-01-03", End: "5d"})
+	assertGolden(t, encode(t, g))
+}
+
 func TestGanttResolveErrors(t *testing.T) {
 	g := ast.NewGantt("")
 	g.AddTask(ast.GanttTask{Name: "Bad", Start: "after missing", End: "5d"})

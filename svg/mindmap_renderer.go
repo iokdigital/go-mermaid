@@ -19,6 +19,11 @@ const (
 	mindPadX  = 28.0
 	mindLineH = 20.0
 	mindPadY  = 16.0
+
+	// mindLevelGap is the vertical gap between stacked sibling subtrees;
+	// mindLevelGapX is the horizontal distance between depth ranks.
+	mindLevelGap  = 16.0
+	mindLevelGapX = 120.0
 )
 
 // mindLevelColors shades nodes by tree depth.
@@ -138,6 +143,27 @@ func encodeMindmap(w io.Writer, d *ast.MindmapDiagram, opts diagram.RenderOption
 
 	_, err := io.WriteString(w, sb.String())
 	return err
+}
+
+// mindSubtreeHeight returns the vertical extent of the subtree rooted at n:
+// a leaf's extent is its node height; a parent's extent is
+// max(children total + gaps, own height). The seen map guards cycles (same
+// pattern as the flatten walk).
+func mindSubtreeHeight(n *ast.MindNode, size func(string) (float64, float64), seen map[*ast.MindNode]bool) float64 {
+	if n == nil || seen[n] {
+		return 0
+	}
+	seen[n] = true
+	_, h := size(n.Label)
+	if len(n.Children) == 0 {
+		return h
+	}
+	total := 0.0
+	for _, c := range n.Children {
+		total += mindSubtreeHeight(c, size, seen)
+	}
+	total += float64(len(n.Children)-1) * mindLevelGap
+	return math.Max(h, total)
 }
 
 // mindNodeSize estimates node dimensions from the label text.

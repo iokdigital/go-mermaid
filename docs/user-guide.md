@@ -42,6 +42,10 @@ at print resolution, so very large diagrams may exceed the default
 \`MaxPNGBytes\` budget — raise it or handle the \`ErrPNGSizeLimitExceeded\`
 fallback (see Render Options above).
 
+Mindmap SVG renders Mermaid-style: the root is horizontally centered,
+level-1 subtrees alternate right/left (first child right), and edges are
+horizontal elbow connectors.
+
 PNG images include diagram text labels: after the shape pass, a text overlay
 pass draws each SVG `<text>` run with the embedded Go fonts (pure Go, no
 system fonts needed). Glyph positions come straight from the SVG layout, but

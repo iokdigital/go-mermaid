@@ -206,10 +206,11 @@ func mindLayoutTwoSided(flat []mindLayoutNode, root *ast.MindNode, padding float
 	return result
 }
 
-// encodeMindmap renders a *ast.MindmapDiagram to w as an SVG document.
-// The tree is laid out left-to-right (root first) using the generic Sugiyama
-// layout. This diverges from Mermaid's centered two-sided mindmap style,
-// which is documented here. A nil root renders an empty diagram frame.
+// encodeMindmap renders a *ast.MindmapDiagram to w as an SVG document with
+// the Mermaid-style centered two-sided layout: the root is horizontally
+// centered in the viewport, level-1 subtrees alternate right, left, right
+// (first child right), each side stacks top-down, and edges are horizontal
+// elbows. A nil root renders an empty diagram frame.
 func encodeMindmap(w io.Writer, d *ast.MindmapDiagram, opts diagram.RenderOptions) error {
 	padding := float64(opts.SVGPadding)
 	if padding <= 0 {

@@ -93,6 +93,22 @@ func TestMindmap_BalancedSides(t *testing.T) {
 	}
 }
 
+func TestMindmap_ElbowEdges(t *testing.T) {
+	out := encode2(t, mindmapFixture())
+	// Elbow connectors: each edge path is M x,y H mid V y2 H x2 — the path
+	// data inside the edges group must contain H/V segments (straight
+	// diagonals are pure M/L).
+	start := strings.Index(out, `id="mindmap-edges"`)
+	if start < 0 {
+		t.Fatal("no edges group")
+	}
+	end := strings.Index(out[start:], "</g>")
+	paths := out[start : start+end]
+	if !strings.Contains(paths, "H") || !strings.Contains(paths, "V") {
+		t.Errorf("expected elbow connectors with H/V segments in edge paths:\n%s", paths)
+	}
+}
+
 func TestMindmap_EdgesConnectTree(t *testing.T) {
 	out := encode2(t, mindmapFixture())
 	// 6 nodes -> 5 parent-child edges.

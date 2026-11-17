@@ -280,7 +280,10 @@ func encodeMindmap(w io.Writer, d *ast.MindmapDiagram, opts diagram.RenderOption
 
 	writeSVGHeader(&sb, lr.width, lr.height, opts, d.Title())
 
-	// Edges first so nodes render on top.
+	// Edges first so nodes render on top. Mermaid-style horizontal elbows:
+	// parent edge-midpoint → horizontal → vertical trunk → horizontal →
+	// child (single M/H/V/H path; the trunk's x is the midpoint between the
+	// two anchor edges, which spans the center gap for root-to-first-level).
 	sb.WriteString(`  <g id="mindmap-edges">` + "\n")
 	for _, e := range gedges {
 		src, ok1 := lr.nodes[e.From]
@@ -288,10 +291,17 @@ func encodeMindmap(w io.Writer, d *ast.MindmapDiagram, opts diagram.RenderOption
 		if !ok1 || !ok2 {
 			continue
 		}
-		x1 := src.x + src.w/2
-		x2 := dst.x - dst.w/2
-		fmt.Fprintf(&sb, `    <path d="M%.1f,%.1f L%.1f,%.1f" fill="none" stroke="#94a3b8" stroke-width="1.5"/>`+"\n",
-			x1, src.y, x2, dst.y)
+		var x1, x2 float64
+		if dst.x >= src.x {
+			x1 = src.x + src.w/2
+			x2 = dst.x - dst.w/2
+		} else {
+			x1 = src.x - src.w/2
+			x2 = dst.x + dst.w/2
+		}
+		midx := (x1 + x2) / 2
+		fmt.Fprintf(&sb, `    <path d="M%.1f,%.1f H%.1f V%.1f H%.1f" fill="none" stroke="#94a3b8" stroke-width="1.5"/>`+"\n",
+			x1, src.y, midx, dst.y, x2)
 	}
 	sb.WriteString("  </g>\n")
 

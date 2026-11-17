@@ -878,8 +878,9 @@ func encodeMindmap(w io.Writer, m *ast.MindmapDiagram) error {
 }
 
 // encodeGantt renders tasks as labelled box nodes in dependency order with
-// date ranges. Calendar geometry has no DOT equivalent; the schedule data
-// is preserved in node labels.
+// date ranges, plus after/until dependency edges between task nodes.
+// Calendar geometry has no DOT equivalent; the schedule data is preserved in
+// node labels.
 func encodeGantt(w io.Writer, g *ast.GanttDiagram) error {
 	tasks, err := g.Resolve()
 	if err != nil {
@@ -901,6 +902,57 @@ func encodeGantt(w io.Writer, g *ast.GanttDiagram) error {
 		_, _ = fmt.Fprintf(w, "  task_%d [label=%q];\n", i,
 			fmt.Sprintf("%s (%s – %s)", label,
 				t.Start.Format("2006-01-02"), t.End.Format("2006-01-02")))
+	}
+
+	// Dependency edges: rebuild the id→node-index map with the same
+	// traversal order Resolve uses (unsectioned tasks first, then each
+	// section's tasks). Resolve already validated every ref, so a missing
+	// ref here is defensive only; skip it rather than emit a dangling edge.
+	idOf := make(map[string]int)
+	idx := 0
+	addRefs := func(t ast.GanttTask) {
+		if t.ID != "" {
+			idOf[t.ID] = idx
+		}
+		idx++
+	}
+	for _, t := range g.Tasks() {
+		addRefs(t)
+	}
+	for _, s := range g.Sections() {
+		for _, t := range s.Tasks {
+			addRefs(t)
+		}
+	}
+	refOf := func(field, prefix string, i int) (int, bool) {
+		s := strings.TrimSpace(field)
+		rest, found := strings.CutPrefix(s, prefix)
+		if !found {
+			return 0, false
+		}
+		j, known := idOf[strings.TrimSpace(rest)]
+		if !known || j == i {
+			return 0, false
+		}
+		return j, true
+	}
+	idx = 0
+	addEdge := func(t ast.GanttTask) {
+		if j, ok := refOf(t.Start, "after ", idx); ok {
+			_, _ = fmt.Fprintf(w, "  task_%d -> task_%d;\n", j, idx)
+		}
+		if j, ok := refOf(t.End, "until ", idx); ok {
+			_, _ = fmt.Fprintf(w, "  task_%d -> task_%d;\n", j, idx)
+		}
+		idx++
+	}
+	for _, t := range g.Tasks() {
+		addEdge(t)
+	}
+	for _, s := range g.Sections() {
+		for _, t := range s.Tasks {
+			addEdge(t)
+		}
 	}
 
 	_, _ = fmt.Fprintln(w, "}")

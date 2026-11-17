@@ -1005,6 +1005,25 @@ func TestDOTGanttBasic(t *testing.T) {
 			t.Errorf("expected %q in DOT output:\n%s", want, got)
 		}
 	}
+	if !strings.Contains(got, "task_0 -> task_1") {
+		t.Errorf("expected dependency edge, got:\n%s", got)
+	}
+}
+
+func TestDOTGanttDependencies(t *testing.T) {
+	sec := ast.NewGanttSection("S")
+	sec.AddTask(ast.GanttTask{Name: "A", ID: "a", Start: "2014-01-01", End: "5d"})
+	sec.AddTask(ast.GanttTask{Name: "B", ID: "b", Start: "after a", End: "3d"})
+	sec.AddTask(ast.GanttTask{Name: "C", ID: "c", Start: "2014-01-02", End: "until b"})
+	g := ast.NewGantt("")
+	g.AddSection(*sec)
+
+	got := encode(t, g)
+	for _, want := range []string{"task_0 -> task_1", "task_1 -> task_2"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected dependency edge %q, got:\n%s", want, got)
+		}
+	}
 }
 
 func TestDOTGanttUnresolvableErrors(t *testing.T) {

@@ -678,6 +678,12 @@ func encodeGantt(w io.Writer, g *ast.GanttDiagram) error {
 	if f := g.AxisFormat(); f != "" {
 		_, _ = fmt.Fprintf(w, "  axisFormat %s\n", f)
 	}
+	if e := g.Excludes(); e != "" {
+		_, _ = fmt.Fprintf(w, "  excludes %s\n", e)
+	}
+	if m := g.TodayMarker(); m != "" {
+		_, _ = fmt.Fprintf(w, "  todayMarker %s\n", m)
+	}
 	for _, t := range g.Tasks() {
 		encodeGanttTask(w, t, "  ")
 	}

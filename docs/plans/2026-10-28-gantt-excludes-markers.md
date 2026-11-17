@@ -29,7 +29,7 @@ Probed via `scripts/pele-diff/probe*.mjs` (throwaway). Day-stepping model confir
 - `excludes 2014-01-06` (custom date), task starts Mon `2014-01-06`, `5d` → end **`2014-01-11`** (start day 01-06 is shaded excluded but still consumes day 1).
 - Combined `excludes weekends, 2014-01-10` from Fri `2014-01-03`, `5d` → end **`2014-01-13`** (skips 01-04/05 and 01-10/11/12).
 - Task starting on an excluded day (Sat `2014-01-04`, `5d`, `excludes weekends`) → end **`2014-01-10`**; the bar still starts at 01-04 (start date is never moved).
-- Fractional `2.5d` from Fri `2014-01-03` + `excludes weekends` → end **`2014-01-08 00:00`**: fractional remainder consumes pro-rata from the start of the next non-excluded day.
+- Fractional `2.5d` from Fri `2014-01-03` + `excludes weekends` → Pele's axis ends on **`2014-01-08`**: the fractional remainder consumes pro-rata from the start of the next non-excluded day (our engine returns `2014-01-08 12:00`, half-way through that day; Pele's day-granular axis pins the day, not the time).
 - `excludes` also applies with `dateFormat YYYY-MM-DD HH:mm` (whole-day skip, same end dates).
 - `todayMarker <style-attrs>`: Pele parses/accepts the line without error but renders no marker element in its static SVG. Our renderer draws the line at `time.Now()`; tests assert presence only.
 - Pele merges consecutive excluded days into one shading rect per run (`g.pele-excluded`); axis is uncompressed (all calendar days labeled).

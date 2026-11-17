@@ -375,6 +375,48 @@ os.WriteFile("diagram.json", data, 0644)
 
 ---
 
+## Gantt Charts
+
+### Date formats
+
+`dateFormat` supports combinations of the moment-style tokens `YYYY`, `YY`,
+`MMM`, `MM`, `DD`, `D`, `HH`, `H`, `mm`, `ss` (e.g. `DD-MM-YYYY`,
+`MMM D, YYYY`, `YYYY-MM-DD HH:mm:ss`), plus the epoch formats `X` (seconds)
+and `x` (milliseconds). Formats without a year (e.g. `MM-DD`) resolve in the
+current year. Unsupported tokens fail `Resolve` with a descriptive error.
+
+### Excludes
+
+`excludes` takes the `weekends` keyword and/or a comma-separated list of
+dates in the diagram's dateFormat:
+
+```go
+g := ast.NewGantt("Sprint")
+g.SetDateFormat("YYYY-MM-DD")
+g.SetExcludes("weekends, 2014-01-10")
+```
+
+Excluded days consume no task duration: durations skip them. The task's
+start date is never moved (a task may start on an excluded day — that day
+still counts as its first day). Fractional durations (e.g. `2.5d`) consume
+pro-rata from the start of the next non-excluded day.
+
+### Today marker
+
+`todayMarker` draws a vertical line at today (Go's `time.Now()`) when today
+falls inside the axis range. Only the stroke color from the style string is
+honored in SVG output; the full CSS styling is browser-only:
+
+```go
+g.SetTodayMarker("stroke-width:5px,stroke:#0f0,opacity:0.5")
+```
+
+`excludes` and `todayMarker` pass through the MMD encoder verbatim
+(`excludes ...` / `todayMarker ...` lines, emitted after `dateFormat` and
+`axisFormat`), matching Mermaid conventions.
+
+---
+
 ## Error Handling
 
 ```go

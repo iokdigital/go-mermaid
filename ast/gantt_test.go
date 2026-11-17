@@ -61,6 +61,117 @@ func TestGanttResolveMMDDUsesCurrentYear(t *testing.T) {
 	}
 }
 
+func TestGanttExcludesWeekends(t *testing.T) {
+	// Pinned vs Pele: 5d from Friday 2014-01-03 with excludes weekends ends
+	// the following Friday 2014-01-10. The start day consumes even when a
+	// later step is skipped; entered excluded days consume nothing.
+	g := ast.NewGantt("")
+	g.SetExcludes("weekends")
+	g.AddTask(ast.GanttTask{Name: "A", Start: "2014-01-03", End: "5d"})
+
+	tasks, err := g.Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := tasks[0].End.Format("2006-01-02"); got != "2014-01-10" {
+		t.Errorf("expected end 2014-01-10, got %s", got)
+	}
+	if got := tasks[0].Start.Format("2006-01-02"); got != "2014-01-03" {
+		t.Errorf("expected start unchanged 2014-01-03, got %s", got)
+	}
+}
+
+func TestGanttExcludesCustomDate(t *testing.T) {
+	// Pinned vs Pele: excludes 2014-01-06 with the task starting on that day;
+	// the start day still consumes, end 2014-01-11.
+	g := ast.NewGantt("")
+	g.SetExcludes("2014-01-06")
+	g.AddTask(ast.GanttTask{Name: "A", Start: "2014-01-06", End: "5d"})
+
+	tasks, err := g.Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := tasks[0].End.Format("2006-01-02"); got != "2014-01-11" {
+		t.Errorf("expected end 2014-01-11, got %s", got)
+	}
+}
+
+func TestGanttExcludesCombined(t *testing.T) {
+	// Pinned vs Pele: weekends + 2014-01-10 from Fri 2014-01-03, 5d
+	// skips 01-04/05 and 01-10/11/12; end 2014-01-13.
+	g := ast.NewGantt("")
+	g.SetExcludes("weekends, 2014-01-10")
+	g.AddTask(ast.GanttTask{Name: "A", Start: "2014-01-03", End: "5d"})
+
+	tasks, err := g.Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := tasks[0].End.Format("2006-01-02"); got != "2014-01-13" {
+		t.Errorf("expected end 2014-01-13, got %s", got)
+	}
+}
+
+func TestGanttExcludesFractional(t *testing.T) {
+	// Pinned vs Pele: fractional remainder consumes pro-rata from the start
+	// of the next non-excluded day: 2.5d from Fri 2014-01-03 with weekends
+	// excluded ends on 2014-01-08 (Pele's axis ends at that day; our engine
+	// returns 2014-01-08 12:00, half-way through the final day).
+	g := ast.NewGantt("")
+	g.SetExcludes("weekends")
+	g.AddTask(ast.GanttTask{Name: "A", Start: "2014-01-03", End: "2.5d"})
+
+	tasks, err := g.Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := tasks[0].End.Format("2006-01-02"); got != "2014-01-08" {
+		t.Errorf("expected end 2014-01-08, got %s", got)
+	}
+}
+
+func TestGanttExcludesNoExcludesUnchanged(t *testing.T) {
+	// Without excludes, durations are plain additions (existing behavior).
+	g := ast.NewGantt("")
+	g.AddTask(ast.GanttTask{Name: "A", Start: "2014-01-03", End: "5d"})
+
+	tasks, err := g.Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := tasks[0].End.Format("2006-01-02"); got != "2014-01-08" {
+		t.Errorf("expected end 2014-01-08, got %s", got)
+	}
+}
+
+func TestGanttDateFormatTokens(t *testing.T) {
+	cases := []struct {
+		format string
+		in     string
+		want   string // formatted as "2006-01-02 15:04:05"
+	}{
+		{"DD-MM-YYYY", "17-11-2026", "2026-11-17 00:00:00"},
+		{"DD/MM/YYYY", "17/11/2026", "2026-11-17 00:00:00"},
+		{"MMM D, YYYY", "Nov 17, 2026", "2026-11-17 00:00:00"},
+		{"YY-MM-DD", "26-11-17", "2026-11-17 00:00:00"},
+		{"YYYY-MM-DD HH", "2026-11-17 09", "2026-11-17 09:00:00"},
+		{"YYYY-MM-DD HH:mm:ss", "2026-11-17 09:30:45", "2026-11-17 09:30:45"},
+		{"x", "1794907800000", "2026-11-17 09:30:00"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.format, func(t *testing.T) {
+			got, err := ast.ParseGanttDate(tc.in, tc.format)
+			if err != nil {
+				t.Fatalf("ParseGanttDate(%q, %q): %v", tc.in, tc.format, err)
+			}
+			if got.Format("2006-01-02 15:04:05") != tc.want {
+				t.Errorf("got %s, want %s", got.Format("2006-01-02 15:04:05"), tc.want)
+			}
+		})
+	}
+}
+
 func TestGanttResolveUntil(t *testing.T) {
 	g := ast.NewGantt("")
 	g.AddTask(ast.GanttTask{Name: "T2", ID: "t2", Start: "2014-01-10", End: "2014-01-15"})

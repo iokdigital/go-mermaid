@@ -23,6 +23,40 @@ func ganttFixture() *ast.GanttDiagram {
 	return g
 }
 
+func TestGantt_ExcludesShaded(t *testing.T) {
+	g := ast.NewGantt("Weekends")
+	g.SetDateFormat("YYYY-MM-DD")
+	g.SetExcludes("weekends")
+	// Task spans two weekends (start Fri 2014-01-03, 15d → 2014-01-20).
+	g.AddTask(ast.GanttTask{Name: "T", Start: "2014-01-03", End: "15d"})
+	out := encode2(t, g)
+	if !strings.Contains(out, `id="gantt-excluded"`) {
+		t.Errorf("expected excluded-day shading group in SVG:\n%s", out)
+	}
+	if !strings.Contains(out, `fill="#eef2f7"`) {
+		t.Errorf("expected shaded fill for excluded ranges:\n%s", out)
+	}
+}
+
+func TestGantt_TodayMarker(t *testing.T) {
+	g := ast.NewGantt("Today")
+	g.SetDateFormat("YYYY-MM-DD")
+	g.SetTodayMarker("stroke-width:5px,stroke:#0f0,opacity:0.5")
+	// Task range must include time.Now() for the marker to fall inside the
+	// grid (20y of headroom so the test is not year-bound).
+	g.AddTask(ast.GanttTask{Name: "T", Start: "2026-01-01", End: "7300d"})
+	out := encode2(t, g)
+	if !strings.Contains(out, `id="gantt-today"`) {
+		t.Errorf("expected today marker line in SVG:\n%s", out)
+	}
+
+	// Absent when TodayMarker is not set.
+	out = encode2(t, ganttFixture())
+	if strings.Contains(out, `id="gantt-today"`) {
+		t.Error("expected no today marker when TodayMarker is unset")
+	}
+}
+
 func TestGantt_SVGDoctype(t *testing.T) {
 	out := encode2(t, ganttFixture())
 	if !strings.Contains(out, `<?xml version="1.0"`) {

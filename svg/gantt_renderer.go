@@ -120,6 +120,44 @@ func encodeGantt(w io.Writer, d *ast.GanttDiagram, opts diagram.RenderOptions) e
 		return gridX + ganttGridW*t.Sub(minT).Seconds()/maxT.Sub(minT).Seconds()
 	}
 
+	// Excluded-day shading: merged runs of excluded calendar days drawn
+	// behind the bars (before the rows group). Mirrors ast's exclusion
+	// semantics: weekends plus custom dates in the diagram's dateFormat.
+	if excluded := ganttExcludedFn(d); excluded != nil {
+		type span struct{ a, b time.Time }
+		var spans []span
+		for t := ganttDayStart(minT); !t.After(maxT); t = t.AddDate(0, 0, 1) {
+			if !excluded(t) {
+				continue
+			}
+			if n := len(spans); n > 0 && spans[n-1].b.Equal(t) {
+				spans[n-1].b = t.AddDate(0, 0, 1)
+			} else {
+				spans = append(spans, span{t, t.AddDate(0, 0, 1)})
+			}
+		}
+		if len(spans) > 0 {
+			sb.WriteString(`  <g id="gantt-excluded">` + "\n")
+			for _, s := range spans {
+				fmt.Fprintf(&sb, `    <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="#eef2f7"/>`+"\n",
+					scale(s.a), gridY, scale(s.b)-scale(s.a), natH-padding-gridY)
+			}
+			sb.WriteString("  </g>\n")
+		}
+	}
+
+	// Today marker: a vertical line at time.Now() when todayMarker is set
+	// and today falls inside the axis range. Only the stroke color is
+	// honored (parsed from the raw style string); the full CSS styling is
+	// browser-only in Mermaid.
+	if d.TodayMarker() != "" {
+		now := time.Now()
+		if now.After(minT) && now.Before(maxT) {
+			fmt.Fprintf(&sb, `  <g id="gantt-today"><path d="M%.1f,%.1f L%.1f,%.1f" stroke="%s" stroke-width="2"/></g>`+"\n",
+				scale(now), gridY, scale(now), natH-padding, ganttTodayColor(d.TodayMarker()))
+		}
+	}
+
 	// Axis ticks.
 	ticks := ganttTicks(minT, maxT)
 	sb.WriteString(`  <g id="gantt-axis">` + "\n")
@@ -158,6 +196,59 @@ func encodeGantt(w io.Writer, d *ast.GanttDiagram, opts diagram.RenderOptions) e
 
 	_, err = io.WriteString(w, sb.String())
 	return err
+}
+
+// ganttDayStart returns midnight of t's day.
+func ganttDayStart(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
+}
+
+// ganttExcludedFn rebuilds the ast exclusion predicate for the SVG shading:
+// weekends plus custom dates parsed with the diagram's dateFormat. Returns
+// nil when nothing is excluded or a custom date fails to parse (Resolve
+// already rejected invalid dates, so failure here is defensive).
+func ganttExcludedFn(d *ast.GanttDiagram) func(time.Time) bool {
+	if !d.ExcludesWeekends() && len(d.ExcludesDates()) == 0 {
+		return nil
+	}
+	var dates []time.Time
+	for _, raw := range d.ExcludesDates() {
+		t, err := ast.ParseGanttDate(raw, d.DateFormat())
+		if err != nil {
+			continue
+		}
+		dates = append(dates, t)
+	}
+	return func(t time.Time) bool {
+		if d.ExcludesWeekends() {
+			switch t.Weekday() {
+			case time.Saturday, time.Sunday:
+				return true
+			}
+		}
+		for _, dt := range dates {
+			if t.Year() == dt.Year() && t.Month() == dt.Month() && t.Day() == dt.Day() {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// ganttTodayColor extracts stroke:#xxx from a todayMarker style string,
+// defaulting to red.
+func ganttTodayColor(marker string) string {
+	for _, part := range strings.Split(marker, ",") {
+		p := strings.TrimSpace(part)
+		if rest, ok := strings.CutPrefix(p, "stroke:"); ok {
+			c := strings.TrimSpace(rest)
+			if c != "" && !strings.ContainsAny(c, ";{}") {
+				return c
+			}
+		}
+	}
+	return "#ef4444"
 }
 
 // ganttBarSVG returns the bar/marker shape for a resolved task.

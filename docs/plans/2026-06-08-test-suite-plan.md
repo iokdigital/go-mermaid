@@ -1,7 +1,7 @@
 # go-mermaid Test Suite Implementation Plan
 
 **Created:** 2026-06-08
-**Status:** Planned
+**Status:** ~~Planned~~ **RETIRED 2026-11-19 — SUPERSEDED.** Executed same-day (`b675a45` comprehensive suite); current suite is 361 test funcs across 33 files, `go test ./...` green in all 14 packages, `ast` 92.2%. Residual: 3 proposed files never created (`render_pipeline_test`, `roundtrip`, `golden_files`) — narrow follow-up at most, tracked in MASTER_TODO 6.3 close-out, not this plan.
 
 ## Overview
 

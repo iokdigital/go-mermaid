@@ -1,7 +1,7 @@
 # go-mermaid Test Suite Implementation Plan
 
-**Created:** 2026-06-08  
-**Status:** ✅ Stages 1–4 implemented (commit `b675a45`, 2026-06-08, "test: add comprehensive test suite"); Stage 5 property tests still PLANNED (`roundtrip_test.go` / `golden_files_test.go` not yet created — see notes below)
+**Created:** 2026-06-08
+**Status:** ~~Planned~~ **RETIRED 2026-11-19 — SUPERSEDED.** Executed same-day (`b675a45` comprehensive suite); current suite is 361 test funcs across 33 files, `go test ./...` green in all 14 packages, `ast` 92.2%. Residual: 3 proposed files never created (`render_pipeline_test`, `roundtrip`, `golden_files`) — narrow follow-up at most, tracked in MASTER_TODO 6.3 close-out, not this plan.
 
 ## Overview
 
@@ -170,16 +170,14 @@ MD        |  ✓   |  ✓  |   ✓   |  ✓  |   ✓   |  ✓  |    ✓     |   
 
 ## Stage Execution Checklist
 
-## Stage Execution Checklist
-
-- [x] Stage 1: AST package tests — ✅ commit `b675a45` (2026-06-08): `ast/{flowchart,sequence,state,er,class}_test.go` all present; `go test ./...` passes
-- [x] Stage 2: Diagram package tests — ✅ `b675a45`: `diagram/{errors,options,types}_test.go` present and passing
-- [x] Stage 3: Negative tests — ✅ `b675a45`: `tests/negative/error_paths_test.go` (passing; no `tests/unit/` directory — package-level tests kept alongside packages instead)
-- [x] Stage 4: Integration tests — ✅ `b675a45`: `tests/integration/format_combinations_test.go`
-- [ ] Stage 5: Property tests **(PLANNED — only `tests/property/svg_validity_test.go` exists; `roundtrip_test.go` and `golden_files_test.go` not created)**
-- [x] Verify: `go test ./... -count=1` passes — ✅ verified 2026-10-21: all packages + `tests/{integration,negative,property}` ok
-- [x] Verify: `golangci-lint run` passes — ✅ enforced in CI (`fix(ci): pin golangci-lint-action...` `513e990`, 2026-09-01)
-- [ ] Verify: Coverage > 80% overall **(not measured)**
+- [ ] Stage 1: AST package tests
+- [ ] Stage 2: Diagram package tests
+- [ ] Stage 3: Negative tests
+- [ ] Stage 4: Integration tests
+- [ ] Stage 5: Property tests
+- [ ] Verify: `go test ./... -count=1` passes
+- [ ] Verify: `golangci-lint run` passes
+- [ ] Verify: Coverage > 80% overall
 
 ## Notes
 

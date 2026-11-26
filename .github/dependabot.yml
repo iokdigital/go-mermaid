@@ -12,6 +12,13 @@ updates:
     labels:
       - "dependencies"
       - "go"
+    groups:
+      go-patch:
+        # Batch low-risk patch bumps: fewer PRs, fewer CI runs.
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
     commit-message:
       prefix: "deps"
       include: "scope"
